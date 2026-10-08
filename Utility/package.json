@@ -1,0 +1,12 @@
+{
+  "name": "com.ng.utility",
+  "displayName": "Utility",
+  "version": "1.0.0",
+  "unity": "2021.3",
+  "description": "Utility classes and functions for Unity development.",
+  "author": {
+    "name": "Nirav Patel",
+    "email": "nirav6895@gmail.com",
+    "url": "https://github.com/nirav6895"
+  }
+}
