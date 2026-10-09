@@ -8,7 +8,7 @@ namespace NG.DesignPatterns
 {
     /// <summary>
     /// Global event bus keyed by an enum value. Simple to use, but the key carries no payload type: prefer
-    /// <see cref="EventObserver"/> with <see cref="IEvent"/> types for events with data, where a payload
+    /// <see cref="EventBus"/> with <see cref="IEvent"/> types for events with data, where a payload
     /// mismatch can't compile.
     /// <para>
     /// A key may have listeners with different signatures: Execute(key) reaches the Action listeners and
@@ -18,7 +18,7 @@ namespace NG.DesignPatterns
     /// </para>
     /// Main thread only.
     /// </summary>
-    public static class EventObserver<TEnum> where TEnum : Enum
+    public static class EventBus<TEnum> where TEnum : Enum
     {
         #region Variables
         /// <summary>
@@ -29,7 +29,7 @@ namespace NG.DesignPatterns
 
 
         #region Constructors
-        static EventObserver()
+        static EventBus()
         {
             StaticStateReset.Register(Clear);
         }
@@ -163,7 +163,7 @@ namespace NG.DesignPatterns
             }
 
             if (!listeners.Add(callback))
-                Debug.LogWarning($"[EventObserver<{typeof(TEnum).Name}>] {ListenerUtility.Describe(callback)} is already registered for {key}; the duplicate registration was ignored.");
+                Debug.LogWarning($"[EventBus<{typeof(TEnum).Name}>] {ListenerUtility.Describe(callback)} is already registered for {key}; the duplicate registration was ignored.");
         }
 
         private static void UnregisterDelegate(TEnum key, Delegate callback)
@@ -178,7 +178,7 @@ namespace NG.DesignPatterns
                 return false;
 
             listeners.Remove(listener);
-            Debug.LogWarning($"[EventObserver<{typeof(TEnum).Name}>] Removed {ListenerUtility.Describe(listener)} from {key}: its object was destroyed without unregistering.");
+            Debug.LogWarning($"[EventBus<{typeof(TEnum).Name}>] Removed {ListenerUtility.Describe(listener)} from {key}: its object was destroyed without unregistering.");
             return true;
         }
 
@@ -191,7 +191,7 @@ namespace NG.DesignPatterns
                 expected.Add(payload.Length == 0 ? "no payload" : $"a {payload[0].Name} payload");
             }
 
-            Debug.LogWarning($"[EventObserver<{typeof(TEnum).Name}>] {key} was executed with {sent}, but none of its listeners accept that (they expect {string.Join(" or ", expected)}). Check the payload type.");
+            Debug.LogWarning($"[EventBus<{typeof(TEnum).Name}>] {key} was executed with {sent}, but none of its listeners accept that (they expect {string.Join(" or ", expected)}). Check the payload type.");
         }
         #endregion
     }

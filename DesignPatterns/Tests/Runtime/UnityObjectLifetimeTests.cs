@@ -30,30 +30,30 @@ namespace NG.DesignPatterns.Tests
         }
 
         [Test]
-        public void EventObserver_RemovesListenersOfDestroyedObjects_WithAWarning()
+        public void EventBus_RemovesListenersOfDestroyedObjects_WithAWarning()
         {
             var gameObject = new GameObject("Listener");
             var listener = gameObject.AddComponent<TestListener>();
-            EventObserver.Register<Ping>(listener.OnPing);
+            EventBus.Register<Ping>(listener.OnPing);
             Object.DestroyImmediate(gameObject);
 
             LogAssert.Expect(LogType.Warning, new Regex("TestListener.OnPing.*destroyed without unregistering"));
-            EventObserver.Execute(new Ping());
+            EventBus.Execute(new Ping());
 
             Assert.AreEqual(0, listener.Calls);
-            Assert.IsFalse(EventObserver.HasListeners<Ping>());
+            Assert.IsFalse(EventBus.HasListeners<Ping>());
         }
 
         [Test]
-        public void EnumEventObserver_RemovesListenersOfDestroyedObjects_WithAWarning()
+        public void EnumEventBus_RemovesListenersOfDestroyedObjects_WithAWarning()
         {
             var gameObject = new GameObject("Listener");
             var listener = gameObject.AddComponent<TestListener>();
-            EventObserver<GameEvent>.Register(GameEvent.Paused, listener.OnPaused);
+            EventBus<GameEvent>.Register(GameEvent.Paused, listener.OnPaused);
             Object.DestroyImmediate(gameObject);
 
             LogAssert.Expect(LogType.Warning, new Regex("TestListener.OnPaused.*destroyed without unregistering"));
-            EventObserver<GameEvent>.Execute(GameEvent.Paused);
+            EventBus<GameEvent>.Execute(GameEvent.Paused);
 
             Assert.AreEqual(0, listener.Calls);
         }
@@ -72,8 +72,8 @@ namespace NG.DesignPatterns.Tests
 
         private static void ClearRegistries()
         {
-            EventObserver.Clear();
-            EventObserver<GameEvent>.Clear();
+            EventBus.Clear();
+            EventBus<GameEvent>.Clear();
             ServiceLocator.Clear();
         }
     }

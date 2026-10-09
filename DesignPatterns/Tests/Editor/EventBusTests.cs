@@ -8,7 +8,7 @@ using UnityEngine.TestTools;
 
 namespace NG.DesignPatterns.Tests
 {
-    public class EventObserverTests
+    public class EventBusTests
     {
         #region Test Types
         private struct Ping : IEvent
@@ -33,31 +33,31 @@ namespace NG.DesignPatterns.Tests
         [SetUp]
         public void SetUp()
         {
-            ClearObservers();
+            ClearEventBuses();
         }
 
         [TearDown]
         public void TearDown()
         {
-            ClearObservers();
+            ClearEventBuses();
         }
 
-        private static void ClearObservers()
+        private static void ClearEventBuses()
         {
-            EventObserver.Clear();
-            EventObserver<GameEvent>.Clear();
+            EventBus.Clear();
+            EventBus<GameEvent>.Clear();
         }
         #endregion
 
 
-        #region EventObserver
+        #region EventBus
         [Test]
         public void Execute_CallsListener_WithPayload()
         {
             int received = 0;
-            EventObserver.Register<Ping>(ping => received = ping.Value);
+            EventBus.Register<Ping>(ping => received = ping.Value);
 
-            EventObserver.Execute(new Ping { Value = 7 });
+            EventBus.Execute(new Ping { Value = 7 });
 
             Assert.AreEqual(7, received);
         }
@@ -67,13 +67,13 @@ namespace NG.DesignPatterns.Tests
         {
             int calls = 0;
             Action<Ping> listener = _ => calls++;
-            EventObserver.Register(listener);
-            EventObserver.Unregister(listener);
+            EventBus.Register(listener);
+            EventBus.Unregister(listener);
 
-            EventObserver.Execute(new Ping());
+            EventBus.Execute(new Ping());
 
             Assert.AreEqual(0, calls);
-            Assert.IsFalse(EventObserver.HasListeners<Ping>());
+            Assert.IsFalse(EventBus.HasListeners<Ping>());
         }
 
         [Test]
@@ -81,15 +81,15 @@ namespace NG.DesignPatterns.Tests
         {
             int calls = 0;
             Action<Ping> listener = _ => calls++;
-            EventObserver.Register(listener);
+            EventBus.Register(listener);
             LogAssert.Expect(LogType.Warning, new Regex("already registered for Ping"));
-            EventObserver.Register(listener);
+            EventBus.Register(listener);
 
-            EventObserver.Execute(new Ping());
+            EventBus.Execute(new Ping());
             Assert.AreEqual(1, calls);
 
-            EventObserver.Unregister(listener);
-            EventObserver.Execute(new Ping());
+            EventBus.Unregister(listener);
+            EventBus.Execute(new Ping());
             Assert.AreEqual(1, calls);
         }
 
@@ -97,15 +97,15 @@ namespace NG.DesignPatterns.Tests
         public void ThrowingListener_IsLogged_WithTheRealException_AndOthersStillRun()
         {
             int calls = 0;
-            EventObserver.Register<DamageEvent>(_ => throw new InvalidOperationException("boom"));
-            EventObserver.Register<DamageEvent>(_ => calls++);
+            EventBus.Register<DamageEvent>(_ => throw new InvalidOperationException("boom"));
+            EventBus.Register<DamageEvent>(_ => calls++);
 
             LogAssert.Expect(LogType.Exception, new Regex("InvalidOperationException: boom"));
-            EventObserver.Execute(new DamageEvent());
+            EventBus.Execute(new DamageEvent());
 
             LogAssert.Expect(LogType.Exception, new Regex("InvalidOperationException: boom"));
             IEvent untyped = new DamageEvent();
-            EventObserver.Execute(untyped);
+            EventBus.Execute(untyped);
 
             Assert.AreEqual(2, calls);
         }
@@ -114,12 +114,12 @@ namespace NG.DesignPatterns.Tests
         public void Dispatch_UsesTheEventsRuntimeType()
         {
             int critical = 0, plain = 0;
-            EventObserver.Register<CriticalDamageEvent>(_ => critical++);
-            EventObserver.Register<DamageEvent>(_ => plain++);
+            EventBus.Register<CriticalDamageEvent>(_ => critical++);
+            EventBus.Register<DamageEvent>(_ => plain++);
 
             DamageEvent typedAsBase = new CriticalDamageEvent();
-            EventObserver.Execute(typedAsBase);
-            EventObserver.Execute((IEvent)typedAsBase);
+            EventBus.Execute(typedAsBase);
+            EventBus.Execute((IEvent)typedAsBase);
 
             Assert.AreEqual(2, critical);
             Assert.AreEqual(0, plain, "dispatch is by exact runtime type");
@@ -130,11 +130,11 @@ namespace NG.DesignPatterns.Tests
         {
             int secondCalls = 0;
             Action<Ping> second = _ => secondCalls++;
-            EventObserver.Register<Ping>(_ => EventObserver.Unregister(second));
-            EventObserver.Register(second);
+            EventBus.Register<Ping>(_ => EventBus.Unregister(second));
+            EventBus.Register(second);
 
-            Assert.DoesNotThrow(() => EventObserver.Execute(new Ping()));
-            EventObserver.Execute(new Ping());
+            Assert.DoesNotThrow(() => EventBus.Execute(new Ping()));
+            EventBus.Execute(new Ping());
 
             Assert.AreEqual(1, secondCalls, "called from the snapshot of the first dispatch only");
         }
@@ -143,21 +143,21 @@ namespace NG.DesignPatterns.Tests
         public void RegisteringForAnAbstractType_Warns()
         {
             LogAssert.Expect(LogType.Warning, new Regex("abstract or an interface"));
-            EventObserver.Register<AbstractEvent>(_ => { });
+            EventBus.Register<AbstractEvent>(_ => { });
         }
         #endregion
 
 
-        #region EventObserver<TEnum>
+        #region EventBus<TEnum>
         [Test]
         public void Enum_DeliversWithAndWithoutPayload()
         {
             int pauses = 0, score = 0;
-            EventObserver<GameEvent>.Register(GameEvent.Paused, () => pauses++);
-            EventObserver<GameEvent>.Register<int>(GameEvent.ScoreChanged, value => score = value);
+            EventBus<GameEvent>.Register(GameEvent.Paused, () => pauses++);
+            EventBus<GameEvent>.Register<int>(GameEvent.ScoreChanged, value => score = value);
 
-            EventObserver<GameEvent>.Execute(GameEvent.Paused);
-            EventObserver<GameEvent>.Execute(GameEvent.ScoreChanged, 50);
+            EventBus<GameEvent>.Execute(GameEvent.Paused);
+            EventBus<GameEvent>.Execute(GameEvent.ScoreChanged, 50);
 
             Assert.AreEqual(1, pauses);
             Assert.AreEqual(50, score);
@@ -167,11 +167,11 @@ namespace NG.DesignPatterns.Tests
         public void Enum_MixedSignaturesOnOneKey_AreAllowed()
         {
             int plain = 0, withPayload = 0;
-            EventObserver<GameEvent>.Register(GameEvent.Toast, () => plain++);
-            EventObserver<GameEvent>.Register<int>(GameEvent.Toast, _ => withPayload++);
+            EventBus<GameEvent>.Register(GameEvent.Toast, () => plain++);
+            EventBus<GameEvent>.Register<int>(GameEvent.Toast, _ => withPayload++);
 
-            EventObserver<GameEvent>.Execute(GameEvent.Toast);
-            EventObserver<GameEvent>.Execute(GameEvent.Toast, 1);
+            EventBus<GameEvent>.Execute(GameEvent.Toast);
+            EventBus<GameEvent>.Execute(GameEvent.Toast, 1);
 
             Assert.AreEqual(1, plain);
             Assert.AreEqual(1, withPayload);
@@ -182,10 +182,10 @@ namespace NG.DesignPatterns.Tests
         public void Enum_PayloadTypeMismatch_Warns()
         {
             bool called = false;
-            EventObserver<GameEvent>.Register<float>(GameEvent.ScoreChanged, _ => called = true);
+            EventBus<GameEvent>.Register<float>(GameEvent.ScoreChanged, _ => called = true);
 
             LogAssert.Expect(LogType.Warning, new Regex("ScoreChanged was executed with a Int32 payload.*expect a Single payload"));
-            EventObserver<GameEvent>.Execute(GameEvent.ScoreChanged, 10);
+            EventBus<GameEvent>.Execute(GameEvent.ScoreChanged, 10);
 
             Assert.IsFalse(called);
         }
@@ -194,9 +194,9 @@ namespace NG.DesignPatterns.Tests
         public void Enum_AcceptsReferenceTypePayloads()
         {
             string message = null;
-            EventObserver<GameEvent>.Register<string>(GameEvent.Toast, text => message = text);
+            EventBus<GameEvent>.Register<string>(GameEvent.Toast, text => message = text);
 
-            EventObserver<GameEvent>.Execute(GameEvent.Toast, "Saved");
+            EventBus<GameEvent>.Execute(GameEvent.Toast, "Saved");
 
             Assert.AreEqual("Saved", message);
         }
@@ -206,11 +206,11 @@ namespace NG.DesignPatterns.Tests
         {
             int calls = 0;
             Action listener = () => calls++;
-            EventObserver<GameEvent>.Register(GameEvent.Paused, listener);
+            EventBus<GameEvent>.Register(GameEvent.Paused, listener);
             LogAssert.Expect(LogType.Warning, new Regex("already registered for Paused"));
-            EventObserver<GameEvent>.Register(GameEvent.Paused, listener);
+            EventBus<GameEvent>.Register(GameEvent.Paused, listener);
 
-            EventObserver<GameEvent>.Execute(GameEvent.Paused);
+            EventBus<GameEvent>.Execute(GameEvent.Paused);
 
             Assert.AreEqual(1, calls);
         }
@@ -219,11 +219,11 @@ namespace NG.DesignPatterns.Tests
         public void Enum_ThrowingListener_IsLogged_AndOthersStillRun()
         {
             int calls = 0;
-            EventObserver<GameEvent>.Register(GameEvent.Paused, () => throw new InvalidOperationException("enum boom"));
-            EventObserver<GameEvent>.Register(GameEvent.Paused, () => calls++);
+            EventBus<GameEvent>.Register(GameEvent.Paused, () => throw new InvalidOperationException("enum boom"));
+            EventBus<GameEvent>.Register(GameEvent.Paused, () => calls++);
 
             LogAssert.Expect(LogType.Exception, new Regex("enum boom"));
-            EventObserver<GameEvent>.Execute(GameEvent.Paused);
+            EventBus<GameEvent>.Execute(GameEvent.Paused);
 
             Assert.AreEqual(1, calls);
         }

@@ -1,7 +1,8 @@
 namespace NG.DesignPatterns
 {
     /// <summary>
-    /// Implement on the pooled component of a <see cref="ComponentPool{T}"/> to reset state between uses.
+    /// Implement on items of an <see cref="ObjectPool{T}"/>, or on the pooled component of a
+    /// <see cref="ComponentPool{T}"/>, to reset state between uses.
     /// </summary>
     public interface IPoolable
     {

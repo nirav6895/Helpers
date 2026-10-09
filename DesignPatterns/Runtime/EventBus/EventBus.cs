@@ -17,7 +17,7 @@ namespace NG.DesignPatterns
     /// </para>
     /// Main thread only.
     /// </summary>
-    public static class EventObserver
+    public static class EventBus
     {
         #region Variables
         /// <summary>
@@ -28,7 +28,7 @@ namespace NG.DesignPatterns
 
 
         #region Constructors
-        static EventObserver()
+        static EventBus()
         {
             StaticStateReset.Register(Clear);
         }
@@ -45,10 +45,10 @@ namespace NG.DesignPatterns
                 throw new ArgumentNullException(nameof(callback));
 
             if (typeof(T).IsInterface || typeof(T).IsAbstract)
-                Debug.LogWarning($"[EventObserver] {ListenerUtility.Describe(callback)} registered for {typeof(T).Name}, which is abstract or an interface. Events are dispatched by their exact runtime type, so this listener will never be called. Register for the concrete event type.");
+                Debug.LogWarning($"[EventBus] {ListenerUtility.Describe(callback)} registered for {typeof(T).Name}, which is abstract or an interface. Events are dispatched by their exact runtime type, so this listener will never be called. Register for the concrete event type.");
 
             if (!GetOrCreateChannel<T>().Listeners.Add(callback))
-                Debug.LogWarning($"[EventObserver] {ListenerUtility.Describe(callback)} is already registered for {typeof(T).Name}; the duplicate registration was ignored.");
+                Debug.LogWarning($"[EventBus] {ListenerUtility.Describe(callback)} is already registered for {typeof(T).Name}; the duplicate registration was ignored.");
         }
 
         /// <summary>
@@ -145,7 +145,7 @@ namespace NG.DesignPatterns
                     if (ListenerUtility.IsDestroyedTarget(listener))
                     {
                         Listeners.Remove(listener);
-                        Debug.LogWarning($"[EventObserver] Removed {ListenerUtility.Describe(listener)} from {typeof(T).Name}: its object was destroyed without unregistering.");
+                        Debug.LogWarning($"[EventBus] Removed {ListenerUtility.Describe(listener)} from {typeof(T).Name}: its object was destroyed without unregistering.");
                         continue;
                     }
 

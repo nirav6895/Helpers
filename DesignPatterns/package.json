@@ -3,7 +3,7 @@
   "displayName": "Design Patterns",
   "version": "1.0.0",
   "unity": "2021.3",
-  "description": "Reusable Unity design patterns: Singleton, Service Locator, Event Observer, State Machine, Component Pool and Session Store.",
+  "description": "Reusable Unity design patterns: Singleton, Service Locator, Event Bus, State Machine, Object Pool, Component Pool and Session Store.",
   "keywords": [
     "design patterns",
     "singleton",

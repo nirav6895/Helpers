@@ -26,15 +26,15 @@ namespace NG.DesignPatterns.Tests
             int enumCalls = 0;
             ServiceLocator.Add<IResetService>(new ResetService());
             SessionStore.Set(new ResetData());
-            EventObserver.Register<ResetEvent>(_ => { });
-            EventObserver<ResetKey>.Register(ResetKey.A, () => enumCalls++);
+            EventBus.Register<ResetEvent>(_ => { });
+            EventBus<ResetKey>.Register(ResetKey.A, () => enumCalls++);
 
             StaticStateReset.ResetAll();
 
             Assert.IsFalse(ServiceLocator.Contains<IResetService>());
             Assert.IsFalse(SessionStore.Contains<ResetData>());
-            Assert.IsFalse(EventObserver.HasListeners<ResetEvent>());
-            EventObserver<ResetKey>.Execute(ResetKey.A);
+            Assert.IsFalse(EventBus.HasListeners<ResetEvent>());
+            EventBus<ResetKey>.Execute(ResetKey.A);
             Assert.AreEqual(0, enumCalls);
         }
     }

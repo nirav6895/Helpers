@@ -21,7 +21,7 @@ namespace NG.DesignPatterns
         #region Methods
         /// <summary>
         /// Registers a reset callback. Call it from a static constructor so each class registers once.
-        /// Generic static classes (e.g. EventObserver&lt;TEnum&gt;) can't use RuntimeInitializeOnLoadMethod
+        /// Generic static classes (e.g. EventBus&lt;TEnum&gt;) can't use RuntimeInitializeOnLoadMethod
         /// themselves, because Unity can't know which type arguments to call it with.
         /// </summary>
         internal static void Register(Action reset)

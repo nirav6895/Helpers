@@ -9,7 +9,7 @@ namespace NG.DesignPatterns
     /// <summary>
     /// Pool of prefab instances for any Component type. Unity can't add a generic component to a GameObject,
     /// so create a subclass per type, e.g. <c>public class BulletPool : ComponentPool&lt;Bullet&gt; { }</c>,
-    /// add it to a GameObject and assign the prefab.
+    /// add it to a GameObject and assign the prefab. For plain C# objects, use <see cref="ObjectPool{T}"/>.
     /// <para>
     /// Released items are deactivated and kept under the pool's transform. If <typeparamref name="T"/> implements
     /// <see cref="IPoolable"/>, it is notified on every Get and Release so it can reset its state;
@@ -33,8 +33,7 @@ namespace NG.DesignPatterns
 
 
         #region Variables
-        private readonly Stack<T> available = new();
-        private readonly HashSet<T> availableSet = new(IdentityComparer<T>.Instance);
+        private readonly PoolStore<T> store = new();
         #endregion
 
 
@@ -60,7 +59,7 @@ namespace NG.DesignPatterns
         /// <summary>
         /// Number of inactive instances ready to be reused.
         /// </summary>
-        public int CountInactive => available.Count;
+        public int CountInactive => store.Count;
         #endregion
 
 
@@ -132,7 +131,7 @@ namespace NG.DesignPatterns
                 return;
             }
 
-            if (availableSet.Contains(item))
+            if (store.Contains(item))
             {
                 Debug.LogWarning($"[{GetType().Name}] '{item.name}' was released twice; the second release was ignored.", item);
                 return;
@@ -144,15 +143,13 @@ namespace NG.DesignPatterns
             OnRelease(item);
             item.gameObject.SetActive(false);
 
-            if (maxSize > 0 && available.Count >= maxSize)
+            if (!store.TryAdd(item, maxSize))
             {
                 DestroyObject(item.gameObject);
                 return;
             }
 
             item.transform.SetParent(transform, false);
-            available.Push(item);
-            availableSet.Add(item);
         }
 
         /// <summary>
@@ -177,12 +174,11 @@ namespace NG.DesignPatterns
             EnsurePrefab();
 
             int target = maxSize > 0 ? Mathf.Min(count, maxSize) : count;
-            while (available.Count < target)
+            while (store.Count < target)
             {
                 T item = Instantiate(prefab, transform, false);
                 item.gameObject.SetActive(false);
-                available.Push(item);
-                availableSet.Add(item);
+                store.TryAdd(item, maxSize);
             }
         }
 
@@ -191,14 +187,7 @@ namespace NG.DesignPatterns
         /// </summary>
         public void Clear()
         {
-            while (available.Count > 0)
-            {
-                T item = available.Pop();
-                if (item != null)
-                    DestroyObject(item.gameObject);
-            }
-
-            availableSet.Clear();
+            store.Clear(item => DestroyObject(item.gameObject));
         }
         #endregion
 
@@ -222,15 +211,7 @@ namespace NG.DesignPatterns
         /// </summary>
         private T TakeAvailable()
         {
-            while (available.Count > 0)
-            {
-                T item = available.Pop();
-                availableSet.Remove(item);
-                if (item != null)
-                    return item;
-            }
-
-            return null;
+            return store.TryTake(out T item) ? item : null;
         }
 
         private void Activate(T item)

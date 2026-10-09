@@ -71,7 +71,7 @@ namespace NG.DesignPatterns
     }
 
     /// <summary>
-    /// Helpers shared by the event observers.
+    /// Helpers shared by the event buses.
     /// </summary>
     internal static class ListenerUtility
     {

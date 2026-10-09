@@ -18,10 +18,11 @@ To update, change the tag. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 | --- | --- |
 | A manager MonoBehaviour that exists once and is reached from anywhere | `Singleton<T>` |
 | Code that depends on an interface, with the implementation swappable (tests, platforms) | `ServiceLocator` |
-| Systems that react to something without knowing who caused it | `EventObserver` with `IEvent` types |
-| A simple payload-free signal | `EventObserver<TEnum>` |
+| Systems that react to something without knowing who caused it | `EventBus` with `IEvent` types |
+| A simple payload-free signal | `EventBus<TEnum>` |
 | Flow with clear states (game flow, UI flow, AI) | `StateMachine<TEvent>` |
-| Objects created and destroyed often (bullets, list items) | `ComponentPool<T>` |
+| Prefab instances created and destroyed often (bullets, list items) | `ComponentPool<T>` |
+| Plain C# objects created often (lists, StringBuilders, data objects) | `ObjectPool<T>` |
 | Data shared between scenes for the current session | `SessionStore` |
 
 Rules that apply to all of them:
@@ -61,27 +62,27 @@ ServiceLocator.Get<IAudioService>().Play(clip);                     // logs an e
 if (ServiceLocator.TryGet(out IAudioService audio)) audio.Play(clip); // for optional services
 ```
 
-## EventObserver
+## EventBus
 
 ```csharp
 public struct PlayerDied : IEvent { public int Score; }
 
-void OnEnable()  => EventObserver.Register<PlayerDied>(OnPlayerDied);
-void OnDisable() => EventObserver.Unregister<PlayerDied>(OnPlayerDied);
+void OnEnable()  => EventBus.Register<PlayerDied>(OnPlayerDied);
+void OnDisable() => EventBus.Unregister<PlayerDied>(OnPlayerDied);
 void OnPlayerDied(PlayerDied e) { }
 
-EventObserver.Execute(new PlayerDied { Score = 120 });
+EventBus.Execute(new PlayerDied { Score = 120 });
 ```
 
 - Listeners get events whose runtime type is exactly the registered type.
 - A listener that throws is logged with its stack trace; the other listeners still run.
 - Methods of destroyed objects are removed automatically, with a warning naming the class that forgot to unregister.
 
-`EventObserver<TEnum>` uses enum keys instead. The key says nothing about the payload type, so prefer `IEvent` types for events with data. If an `Execute` reaches none of a key's listeners because of a payload mismatch, a warning shows what they expect.
+`EventBus<TEnum>` uses enum keys instead. The key says nothing about the payload type, so prefer `IEvent` types for events with data. If an `Execute` reaches none of a key's listeners because of a payload mismatch, a warning shows what they expect.
 
 ```csharp
-EventObserver<GameEvent>.Register(GameEvent.Paused, OnPaused);
-EventObserver<GameEvent>.Execute(GameEvent.Paused);
+EventBus<GameEvent>.Register(GameEvent.Paused, OnPaused);
+EventBus<GameEvent>.Execute(GameEvent.Paused);
 ```
 
 ## StateMachine
@@ -127,6 +128,26 @@ bulletPool.Release(bullet);
 - Implement `IPoolable` on the pooled component to reset state in `OnSpawn`/`OnDespawn`, or override `OnGet`/`OnRelease` in the pool.
 - **Prewarm Count** creates instances in `Awake`; **Max Size** caps how many inactive instances are kept.
 - Releasing the same item twice is ignored with a warning, and items destroyed while pooled are skipped.
+
+## ObjectPool
+
+The same pool for plain C# objects. It's not a MonoBehaviour: create it in code with a factory function.
+
+```csharp
+var listPool = new ObjectPool<List<Enemy>>(
+    createFunc: () => new List<Enemy>(),
+    actionOnRelease: list => list.Clear(),
+    maxSize: 16);
+
+List<Enemy> nearby = listPool.Get();
+// ... use it ...
+listPool.Release(nearby);
+```
+
+- Optional callbacks: `actionOnGet`, `actionOnRelease` (also applied to prewarmed items) and `actionOnDestroy` (items dropped by `maxSize` or `Clear`).
+- Items that implement `IPoolable` get `OnSpawn` after `actionOnGet` and `OnDespawn` before `actionOnRelease`.
+- `Prewarm`, `MaxSize`, double-release protection and skipping of destroyed Unity objects work as in `ComponentPool<T>`.
+- `UnityEngine.Pool` also has an `ObjectPool<T>`. In a file that imports both namespaces, write `NG.DesignPatterns.ObjectPool<T>`.
 
 ## SessionStore
 
