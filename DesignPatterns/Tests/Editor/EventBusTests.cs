@@ -66,9 +66,9 @@ namespace NG.DesignPatterns.Tests
         public void Unregister_StopsDelivery()
         {
             int calls = 0;
-            Action<Ping> listener = _ => calls++;
-            EventBus.Register(listener);
-            EventBus.Unregister(listener);
+            void listener(Ping _) => calls++;
+            EventBus.Register((Action<Ping>)listener);
+            EventBus.Unregister((Action<Ping>)listener);
 
             EventBus.Execute(new Ping());
 
@@ -80,15 +80,15 @@ namespace NG.DesignPatterns.Tests
         public void DuplicateRegister_IsIgnored_WithAWarning()
         {
             int calls = 0;
-            Action<Ping> listener = _ => calls++;
-            EventBus.Register(listener);
+            void listener(Ping _) => calls++;
+            EventBus.Register((Action<Ping>)listener);
             LogAssert.Expect(LogType.Warning, new Regex("already registered for Ping"));
-            EventBus.Register(listener);
+            EventBus.Register((Action<Ping>)listener);
 
             EventBus.Execute(new Ping());
             Assert.AreEqual(1, calls);
 
-            EventBus.Unregister(listener);
+            EventBus.Unregister((Action<Ping>)listener);
             EventBus.Execute(new Ping());
             Assert.AreEqual(1, calls);
         }
@@ -129,9 +129,9 @@ namespace NG.DesignPatterns.Tests
         public void UnregisteringDuringDispatch_IsSafe()
         {
             int secondCalls = 0;
-            Action<Ping> second = _ => secondCalls++;
-            EventBus.Register<Ping>(_ => EventBus.Unregister(second));
-            EventBus.Register(second);
+            void second(Ping _) => secondCalls++;
+            EventBus.Register<Ping>(_ => EventBus.Unregister((Action<Ping>)second));
+            EventBus.Register((Action<Ping>)second);
 
             Assert.DoesNotThrow(() => EventBus.Execute(new Ping()));
             EventBus.Execute(new Ping());
@@ -205,7 +205,7 @@ namespace NG.DesignPatterns.Tests
         public void Enum_DuplicateRegister_IsIgnored()
         {
             int calls = 0;
-            Action listener = () => calls++;
+            void listener() => calls++;
             EventBus<GameEvent>.Register(GameEvent.Paused, listener);
             LogAssert.Expect(LogType.Warning, new Regex("already registered for Paused"));
             EventBus<GameEvent>.Register(GameEvent.Paused, listener);
