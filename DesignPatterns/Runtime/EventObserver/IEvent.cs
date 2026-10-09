@@ -1,7 +1,8 @@
-namespace NG.DesignPatterns.EventObserver
+namespace NG.DesignPatterns
 {
     /// <summary>
-    /// IEvent Interface to be used as a key & argument in EventController.
+    /// Marks a class or struct as an event for <see cref="EventObserver"/>. The event's type is the key,
+    /// and the instance is the payload passed to every listener.
     /// </summary>
     public interface IEvent { }
 }
