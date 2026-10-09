@@ -1,7 +1,8 @@
-namespace NG.DesignPatterns.ServiceLocator
+namespace NG.DesignPatterns
 {
-    public interface IService
-    {
-        void Register();
-    }
+    /// <summary>
+    /// Marks a type that can be registered in the <see cref="ServiceLocator"/>.
+    /// Have your service interfaces extend it, e.g. <c>public interface IAudioService : IService</c>.
+    /// </summary>
+    public interface IService { }
 }
