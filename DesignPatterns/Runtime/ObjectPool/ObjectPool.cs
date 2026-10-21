@@ -52,6 +52,12 @@ namespace NG.DesignPatterns
         /// <summary>
         /// Items handed out by Get and not released yet, in no particular order. Read-only: it can't be modified,
         /// even by casting it back to a list. Use a for loop to read it without allocating.
+        /// <para>
+        /// It's a live view: Get and Release change it, and Release moves the last item into the released item's place.
+        /// To release items while looping over it, loop backwards, or use <see cref="ReleaseAll"/>.
+        /// </para>
+        /// The pool keeps every item handed out until it is released, so release every item you Get.
+        /// A Unity object destroyed while in use stays in it until it is released.
         /// </summary>
         public IReadOnlyList<T> ActiveItems => store.Active;
         #endregion
@@ -92,8 +98,9 @@ namespace NG.DesignPatterns
         }
 
         /// <summary>
-        /// Returns an item to the pool. Null, destroyed Unity objects, and items already in the pool are ignored.
+        /// Returns an item to the pool. Null is ignored, and releasing an item that is already in the pool is ignored with a warning.
         /// A destroyed Unity object is only removed from <see cref="ActiveItems"/>.
+        /// Releasing the item again from its own release callbacks is ignored, as the first Release keeps it.
         /// </summary>
         public void Release(T item)
         {
@@ -112,14 +119,25 @@ namespace NG.DesignPatterns
                 return;
             }
 
-            if (item is IPoolable poolable)
-                poolable.OnDespawn();
+            // Released again from its own release callbacks. The first Release keeps it.
+            if (!store.TryBeginRelease(item))
+                return;
 
-            actionOnRelease?.Invoke(item);
-            store.RemoveActive(item);
+            try
+            {
+                if (item is IPoolable poolable)
+                    poolable.OnDespawn();
 
-            if (!store.TryAdd(item, maxSize))
-                actionOnDestroy?.Invoke(item);
+                actionOnRelease?.Invoke(item);
+                store.RemoveActive(item);
+
+                if (!store.TryAdd(item, maxSize))
+                    actionOnDestroy?.Invoke(item);
+            }
+            finally
+            {
+                store.EndRelease(item);
+            }
         }
 
         /// <summary>
@@ -134,6 +152,20 @@ namespace NG.DesignPatterns
                 Release(items[i]);
 
             items.Clear();
+        }
+
+        /// <summary>
+        /// Releases every item that is in <see cref="ActiveItems"/> when it's called. Callbacks can Get or Release other items meanwhile.
+        /// </summary>
+        public void ReleaseAll()
+        {
+            // A copy, as releasing changes the active list, and callbacks can release other items too
+            T[] items = store.CopyActive();
+            for (int i = 0; i < items.Length; i++)
+            {
+                if (store.IsActive(items[i]))
+                    Release(items[i]);
+            }
         }
 
         /// <summary>

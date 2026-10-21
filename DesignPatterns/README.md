@@ -7,7 +7,7 @@ Reusable patterns for Unity projects. Everything lives in the `NG.DesignPatterns
 Add the package to `Packages/manifest.json`, pinned to a release tag so updates to `main` can't break your project:
 
 ```json
-"com.ng.designpatterns": "https://github.com/nirav6895/Helpers.git?path=/DesignPatterns#designpatterns-v1.0.1"
+"com.ng.designpatterns": "https://github.com/nirav6895/Helpers.git?path=/DesignPatterns#designpatterns-v1.0.2"
 ```
 
 To update, change the tag. See [CHANGELOG.md](CHANGELOG.md) for what changed.
@@ -129,6 +129,9 @@ bulletPool.Release(bullet);
 - **Prewarm Count** creates instances in `Awake`; **Max Size** caps how many inactive instances are kept.
 - Releasing the same item twice is ignored with a warning, and items destroyed while pooled are skipped.
 - `ActiveItems` lists the items handed out by `Get` and not released yet, in no particular order. It's read-only: it can't be modified, even by casting it to a `List<T>`.
+- `ActiveItems` is a live view: `Get` and `Release` change it. To release every active item, call `ReleaseAll()`. To release some of them while looping over `ActiveItems`, loop backwards.
+- The pool keeps every item handed out until it is released, so release every item you `Get`. An item destroyed while in use stays in `ActiveItems` until it is released.
+- Calling `Release` again from the item's own release callbacks (e.g. `void OnDisable() => pool.Release(this)`) is ignored: the first `Release` keeps the item.
 
 ## ObjectPool
 
@@ -147,7 +150,7 @@ listPool.Release(nearby);
 
 - Optional callbacks: `actionOnGet`, `actionOnRelease` (also applied to prewarmed items) and `actionOnDestroy` (items dropped by `maxSize` or `Clear`).
 - Items that implement `IPoolable` get `OnSpawn` after `actionOnGet` and `OnDespawn` before `actionOnRelease`.
-- `Prewarm`, `MaxSize`, `ActiveItems`, double-release protection and skipping of destroyed Unity objects work as in `ComponentPool<T>`.
+- `Prewarm`, `MaxSize`, `ActiveItems`, `ReleaseAll`, double-release protection and skipping of destroyed Unity objects work as in `ComponentPool<T>`.
 - `UnityEngine.Pool` also has an `ObjectPool<T>`. In a file that imports both namespaces, write `NG.DesignPatterns.ObjectPool<T>`.
 
 ## SessionStore

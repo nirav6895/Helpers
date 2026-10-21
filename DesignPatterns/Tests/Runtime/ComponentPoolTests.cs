@@ -109,6 +109,7 @@ namespace NG.DesignPatterns.Tests
 
             Assert.AreEqual(1, pool.CountInactive);
             Assert.IsTrue(second == null);
+            Assert.AreEqual(0, pool.ActiveItems.Count, "an item destroyed by MaxSize is not active either");
         }
 
         [Test]
@@ -167,6 +168,7 @@ namespace NG.DesignPatterns.Tests
             yield return null;
 
             Assert.IsTrue(item == null);
+            Assert.AreEqual(0, pool.ActiveItems.Count);
         }
 
         [Test]
@@ -192,6 +194,34 @@ namespace NG.DesignPatterns.Tests
 
             Assert.AreEqual(0, pool.ActiveItems.Count);
             Assert.AreEqual(0, pool.CountInactive);
+        }
+
+        [Test]
+        public void ReleaseAll_ReleasesEveryActiveItem()
+        {
+            var items = new List<TestPooledItem> { Track(pool.Get()), Track(pool.Get()), Track(pool.Get()) };
+
+            pool.ReleaseAll();
+
+            Assert.AreEqual(0, pool.ActiveItems.Count);
+            Assert.AreEqual(3, pool.CountInactive);
+            foreach (TestPooledItem item in items)
+                Assert.IsFalse(item.gameObject.activeSelf);
+        }
+
+        [Test]
+        public void ReleasingAgainFromOnDisable_KeepsTheItemOnce()
+        {
+            TestPooledItem item = Track(pool.Get());
+            item.ReleaseOnDisable = pool;
+
+            pool.Release(item);
+            item.ReleaseOnDisable = null;
+
+            Assert.AreEqual(1, pool.CountInactive);
+            Assert.AreEqual(1, item.Despawns, "release callbacks ran once");
+            Assert.AreSame(pool.transform, item.transform.parent);
+            Assert.AreNotSame(Track(pool.Get()), Track(pool.Get()));
         }
 
         private T Track<T>(T component) where T : Component

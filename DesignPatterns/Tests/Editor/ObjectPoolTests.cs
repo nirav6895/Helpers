@@ -192,10 +192,11 @@ namespace NG.DesignPatterns.Tests
             AlwaysEqual first = pool.Get();
             AlwaysEqual second = pool.Get();
 
-            pool.Release(first);
+            // Removing by Equals would remove the first match, i.e. the wrong item
+            pool.Release(second);
 
             Assert.AreEqual(1, pool.ActiveItems.Count);
-            Assert.AreSame(second, pool.ActiveItems[0]);
+            Assert.AreSame(first, pool.ActiveItems[0]);
         }
 
         [Test]
@@ -209,6 +210,69 @@ namespace NG.DesignPatterns.Tests
 
             Assert.AreEqual(0, pool.ActiveItems.Count);
             Assert.AreEqual(0, pool.CountInactive);
+        }
+
+        [Test]
+        public void ReleaseAll_ReleasesEveryActiveItem()
+        {
+            var pool = new ObjectPool<Bullet>(() => new Bullet());
+            for (int i = 0; i < 6; i++)
+                pool.Get();
+
+            pool.ReleaseAll();
+
+            Assert.AreEqual(0, pool.ActiveItems.Count);
+            Assert.AreEqual(6, pool.CountInactive);
+        }
+
+        [Test]
+        public void ReleaseAll_WhenACallbackReleasesAnotherItem_ReleasesEachOnce()
+        {
+            ObjectPool<Bullet> pool = null;
+            Bullet first = null;
+            Bullet second = null;
+            pool = new ObjectPool<Bullet>(() => new Bullet(), actionOnRelease: item =>
+            {
+                if (item == first)
+                    pool.Release(second);
+            });
+            first = pool.Get();
+            second = pool.Get();
+
+            pool.ReleaseAll();
+
+            LogAssert.NoUnexpectedReceived();
+            Assert.AreEqual(0, pool.ActiveItems.Count);
+            Assert.AreEqual(2, pool.CountInactive);
+        }
+
+        [Test]
+        public void ReleaseAll_WhenACallbackGetsANewItem_KeepsItActive()
+        {
+            ObjectPool<Bullet> pool = null;
+            Bullet extra = null;
+            pool = new ObjectPool<Bullet>(() => new Bullet(), actionOnRelease: _ => extra ??= pool.Get());
+            Bullet first = pool.Get();
+
+            pool.ReleaseAll();
+
+            Assert.AreEqual(1, pool.ActiveItems.Count);
+            Assert.AreSame(extra, pool.ActiveItems[0]);
+            Assert.AreNotSame(first, extra);
+        }
+
+        [Test]
+        public void ReleasingAgainFromAReleaseCallback_KeepsTheItemOnce()
+        {
+            ObjectPool<Bullet> pool = null;
+            pool = new ObjectPool<Bullet>(() => new Bullet(), actionOnRelease: item => pool.Release(item));
+            Bullet bullet = pool.Get();
+
+            pool.Release(bullet);
+
+            Assert.AreEqual(1, pool.CountInactive);
+            CollectionAssert.AreEqual(new[] { "OnSpawn", "OnDespawn" }, bullet.Trace, "release callbacks ran once");
+            Assert.AreNotSame(pool.Get(), pool.Get());
         }
         #endregion
     }

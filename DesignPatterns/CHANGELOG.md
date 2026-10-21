@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.2] - 2026-10-21
+
+### Added
+- **ComponentPool** and **ObjectPool**: `ReleaseAll()` releases every item in `ActiveItems`.
+
+### Fixed
+- **ComponentPool** and **ObjectPool**: calling `Release` again from the item's own release callbacks (e.g. `OnDisable() => pool.Release(this)`) stored the item twice, so two later `Get` calls could hand out the same item, and the release callbacks ran twice. The second call is now ignored.
+- Docs: `ActiveItems` is a live view that `Get` and `Release` change, and the pool keeps every item handed out until it is released.
+
 ## [1.0.1] - 2026-10-21
 
 ### Added
