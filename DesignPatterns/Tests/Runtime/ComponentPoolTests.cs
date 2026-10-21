@@ -169,6 +169,31 @@ namespace NG.DesignPatterns.Tests
             Assert.IsTrue(item == null);
         }
 
+        [Test]
+        public void ActiveItems_HasItemsHandedOut_UntilTheyAreReleased()
+        {
+            pool.Prewarm(1);
+            TestPooledItem first = Track(pool.Get());
+            TestPooledItem second = Track(pool.Get());
+
+            pool.Release(first);
+
+            CollectionAssert.AreEquivalent(new[] { second }, pool.ActiveItems);
+            Assert.IsNotInstanceOf<List<TestPooledItem>>(pool.ActiveItems);
+        }
+
+        [Test]
+        public void ReleasingAnItemDestroyedWhileInUse_RemovesItFromActiveItems()
+        {
+            TestPooledItem item = pool.Get();
+            Object.DestroyImmediate(item.gameObject);
+
+            pool.Release(item);
+
+            Assert.AreEqual(0, pool.ActiveItems.Count);
+            Assert.AreEqual(0, pool.CountInactive);
+        }
+
         private T Track<T>(T component) where T : Component
         {
             created.Add(component.gameObject);

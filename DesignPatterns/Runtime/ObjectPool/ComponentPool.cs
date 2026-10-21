@@ -60,6 +60,13 @@ namespace NG.DesignPatterns
         /// Number of inactive instances ready to be reused.
         /// </summary>
         public int CountInactive => store.Count;
+
+        /// <summary>
+        /// Instances handed out by Get and not released yet, in no particular order. Read-only: it can't be modified,
+        /// even by casting it back to a list. Use a for loop to read it without allocating.
+        /// An instance destroyed while in use stays in it until it is released.
+        /// </summary>
+        public IReadOnlyList<T> ActiveItems => store.Active;
         #endregion
 
 
@@ -117,16 +124,24 @@ namespace NG.DesignPatterns
 
         /// <summary>
         /// Deactivates an item and keeps it for reuse. Releasing an item that is already in the pool is
-        /// ignored with a warning; destroyed items are ignored.
+        /// ignored with a warning; destroyed items are only removed from <see cref="ActiveItems"/>.
         /// </summary>
         public void Release(T item)
         {
-            if (item == null)
+            if (item is null)
                 return;
+
+            if (item == null)
+            {
+                // Destroyed while in use
+                store.RemoveActive(item);
+                return;
+            }
 
             if (this == null)
             {
                 // The pool itself is gone (e.g. its scene was unloaded), so there is nowhere to keep the item.
+                store.RemoveActive(item);
                 DestroyObject(item.gameObject);
                 return;
             }
@@ -142,6 +157,7 @@ namespace NG.DesignPatterns
 
             OnRelease(item);
             item.gameObject.SetActive(false);
+            store.RemoveActive(item);
 
             if (!store.TryAdd(item, maxSize))
             {
@@ -216,6 +232,7 @@ namespace NG.DesignPatterns
 
         private void Activate(T item)
         {
+            store.AddActive(item);
             item.gameObject.SetActive(true);
             OnGet(item);
 

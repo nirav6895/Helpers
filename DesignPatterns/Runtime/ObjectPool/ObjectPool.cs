@@ -48,6 +48,12 @@ namespace NG.DesignPatterns
         /// Number of inactive items ready to be reused.
         /// </summary>
         public int CountInactive => store.Count;
+
+        /// <summary>
+        /// Items handed out by Get and not released yet, in no particular order. Read-only: it can't be modified,
+        /// even by casting it back to a list. Use a for loop to read it without allocating.
+        /// </summary>
+        public IReadOnlyList<T> ActiveItems => store.Active;
         #endregion
 
 
@@ -77,6 +83,7 @@ namespace NG.DesignPatterns
             if (!store.TryTake(out T item))
                 item = Create();
 
+            store.AddActive(item);
             actionOnGet?.Invoke(item);
             if (item is IPoolable poolable)
                 poolable.OnSpawn();
@@ -86,11 +93,18 @@ namespace NG.DesignPatterns
 
         /// <summary>
         /// Returns an item to the pool. Null, destroyed Unity objects, and items already in the pool are ignored.
+        /// A destroyed Unity object is only removed from <see cref="ActiveItems"/>.
         /// </summary>
         public void Release(T item)
         {
-            if (item == null || PoolStore<T>.IsDestroyed(item))
+            if (item == null)
                 return;
+
+            if (PoolStore<T>.IsDestroyed(item))
+            {
+                store.RemoveActive(item);
+                return;
+            }
 
             if (store.Contains(item))
             {
@@ -102,6 +116,7 @@ namespace NG.DesignPatterns
                 poolable.OnDespawn();
 
             actionOnRelease?.Invoke(item);
+            store.RemoveActive(item);
 
             if (!store.TryAdd(item, maxSize))
                 actionOnDestroy?.Invoke(item);

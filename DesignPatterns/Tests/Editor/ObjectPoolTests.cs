@@ -20,6 +20,12 @@ namespace NG.DesignPatterns.Tests
             public void OnSpawn() => Trace.Add("OnSpawn");
             public void OnDespawn() => Trace.Add("OnDespawn");
         }
+
+        private sealed class AlwaysEqual
+        {
+            public override bool Equals(object other) => true;
+            public override int GetHashCode() => 0;
+        }
         #endregion
 
 
@@ -148,6 +154,60 @@ namespace NG.DesignPatterns.Tests
         {
             var pool = new ObjectPool<Bullet>(() => new Bullet());
             Assert.DoesNotThrow(() => pool.Release((Bullet)null));
+            Assert.AreEqual(0, pool.CountInactive);
+        }
+
+        [Test]
+        public void ActiveItems_HasItemsHandedOut_UntilTheyAreReleased()
+        {
+            var pool = new ObjectPool<Bullet>(() => new Bullet(), maxSize: 1);
+            pool.Prewarm(1);
+            Bullet first = pool.Get();
+            Bullet second = pool.Get();
+            Bullet third = pool.Get();
+
+            pool.Release(first);
+            CollectionAssert.AreEquivalent(new[] { second, third }, pool.ActiveItems);
+
+            pool.Release(second);
+            CollectionAssert.AreEquivalent(new[] { third }, pool.ActiveItems, "an item dropped by MaxSize is not active either");
+        }
+
+        [Test]
+        public void ActiveItems_CantBeModified()
+        {
+            var pool = new ObjectPool<Bullet>(() => new Bullet());
+            pool.Get();
+
+            Assert.IsNotInstanceOf<List<Bullet>>(pool.ActiveItems);
+            Assert.Throws<NotSupportedException>(() => ((IList<Bullet>)pool.ActiveItems).Add(new Bullet()));
+            Assert.Throws<NotSupportedException>(() => ((IList<Bullet>)pool.ActiveItems).Clear());
+            Assert.AreEqual(1, pool.ActiveItems.Count);
+        }
+
+        [Test]
+        public void ActiveItems_TracksItemsByReference_EvenIfEqualsIsOverridden()
+        {
+            var pool = new ObjectPool<AlwaysEqual>(() => new AlwaysEqual());
+            AlwaysEqual first = pool.Get();
+            AlwaysEqual second = pool.Get();
+
+            pool.Release(first);
+
+            Assert.AreEqual(1, pool.ActiveItems.Count);
+            Assert.AreSame(second, pool.ActiveItems[0]);
+        }
+
+        [Test]
+        public void ActiveItems_DropsAUnityObjectDestroyedWhileInUse_WhenItIsReleased()
+        {
+            var pool = new ObjectPool<Texture2D>(() => new Texture2D(1, 1));
+            Texture2D texture = pool.Get();
+            Object.DestroyImmediate(texture);
+
+            pool.Release(texture);
+
+            Assert.AreEqual(0, pool.ActiveItems.Count);
             Assert.AreEqual(0, pool.CountInactive);
         }
         #endregion

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.1] - 2026-10-21
+
+### Added
+- **ComponentPool** and **ObjectPool**: `ActiveItems`, a read-only list of the items handed out by `Get` and not released yet.
+
 ## [1.0.0] - 2026-10-09
 
 First tagged release. It has breaking changes from the untagged initial import, which no project used yet.

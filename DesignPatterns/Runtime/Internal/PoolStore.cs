@@ -6,7 +6,8 @@ using System.Collections.Generic;
 namespace NG.DesignPatterns
 {
     /// <summary>
-    /// Inactive items of a pool, shared by <see cref="ObjectPool{T}"/> and <see cref="ComponentPool{T}"/>.
+    /// Items of a pool, shared by <see cref="ObjectPool{T}"/> and <see cref="ComponentPool{T}"/>: the inactive items
+    /// ready to be reused, and the active items handed out and not released yet.
     /// Tracks membership by reference so a double release can be detected, and skips Unity objects that were
     /// destroyed while stored. Main thread only.
     /// </summary>
@@ -15,11 +16,37 @@ namespace NG.DesignPatterns
         #region Variables
         private readonly Stack<T> items = new();
         private readonly HashSet<T> lookup = new(IdentityComparer<T>.Instance);
+
+        /// <summary>
+        /// Active items, in no particular order.
+        /// </summary>
+        private readonly List<T> active = new();
+
+        /// <summary>
+        /// Index of every active item in <see cref="active"/>, so it can be removed without searching the list.
+        /// </summary>
+        private readonly Dictionary<T, int> activeIndex = new(IdentityComparer<T>.Instance);
         #endregion
 
 
         #region Properties
+        /// <summary>
+        /// Number of inactive items.
+        /// </summary>
         public int Count => items.Count;
+
+        /// <summary>
+        /// Read-only view of the active items, in no particular order. It can't be cast back to a list to modify it.
+        /// </summary>
+        public IReadOnlyList<T> Active { get; }
+        #endregion
+
+
+        #region Constructors
+        public PoolStore()
+        {
+            Active = active.AsReadOnly();
+        }
         #endregion
 
 
@@ -77,6 +104,38 @@ namespace NG.DesignPatterns
             }
 
             lookup.Clear();
+        }
+
+        /// <summary>
+        /// Marks <paramref name="item"/> as active, i.e. handed out by Get.
+        /// </summary>
+        public void AddActive(T item)
+        {
+            if (activeIndex.ContainsKey(item))
+                return;
+
+            activeIndex.Add(item, active.Count);
+            active.Add(item);
+        }
+
+        /// <summary>
+        /// Marks <paramref name="item"/> as not active anymore. Items that are not active are ignored.
+        /// </summary>
+        public void RemoveActive(T item)
+        {
+            if (!activeIndex.Remove(item, out int index))
+                return;
+
+            // Move the last item into the removed slot, so nothing else has to shift
+            int lastIndex = active.Count - 1;
+            if (index != lastIndex)
+            {
+                T lastItem = active[lastIndex];
+                active[index] = lastItem;
+                activeIndex[lastItem] = index;
+            }
+
+            active.RemoveAt(lastIndex);
         }
 
         /// <summary>
