@@ -27,6 +27,8 @@ To update, change the tag. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 | "02:15", "1d 4h" | `TimeFormatting` |
 | A pausable, repeatable countdown | `CountdownTimer` |
 | PlayerPrefs for bool, long, double, enums, DateTime and objects | `Prefs` |
+| PlayerPrefs that players can't read or edit | `SecurePrefs` |
+| API traffic that can't be read or changed through a proxy | `PinnedCertificateHandler` |
 | Waiting for an Animator state or a Timeline to finish | `animator.PlayAndWait(...)`, `director.PlayAndWait()` |
 | A spinning loading icon or collectible | `AutoRotate` |
 | Small helpers: `GetOrAddComponent`, `DestroyChildren`, `With`, `WithAlpha`, `SetVisible`, `Shuffle`, `GetRandom` | Extension methods |
@@ -154,7 +156,44 @@ Prefs.SetObject("settings", settings);               // [Serializable] class, st
 Settings loaded = Prefs.GetObject("settings", new Settings());
 ```
 
-A missing key or unreadable value returns the default. Enums are stored by name. PlayerPrefs isn't encrypted, so don't store purchases in it.
+A missing key or unreadable value returns the default. Enums are stored by name. PlayerPrefs is plain text that players can edit: for values they shouldn't change, use `SecurePrefs`.
+
+## SecurePrefs
+
+Encrypted PlayerPrefs with the same types as `Prefs`, plus int, float and string. Configure it once with a secret only your game uses, before anything reads a value:
+
+```csharp
+[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+static void ConfigurePrefs() => SecurePrefs.Configure("a long random string only your game uses");
+
+SecurePrefs.SetLong("coins", 1500);
+long coins = SecurePrefs.GetLong("coins");
+SecurePrefs.TamperDetected += key => Debug.Log($"{key} was edited");
+```
+
+- Each value is encrypted with AES-256 (a new random IV every time) and signed with HMAC-SHA256 together with its key name. Key names are stored hashed, so players can't tell which entry is which.
+- A value that was edited, copied from another key, or saved with a different secret is rejected: Get returns the default, logs a warning and raises `TamperDetected`.
+- `Configure(secret, bindToDevice: true)` also stops saves copied to another device from loading. Values restored from a backup onto a new phone are then lost too, and on iOS reinstalling the app can change the device identifier. It has no effect on WebGL.
+- **Moving existing values:** call `MigrateInt`, `MigrateFloat` or `MigrateString` at startup for each key in the update that switches to SecurePrefs (`MigrateString` covers values saved with `Prefs.SetLong`, `SetDouble`, `SetEnum`, `SetDateTime` and `SetObject`). Each moves the plain value in and deletes it. Remove these calls in a later update, because until then a player can plant a plain value for a key that has no secure value yet.
+- **What it can't do:** the secret ships inside your game, so this stops editing with a text or registry editor, not someone who reverse-engineers the build. It also can't stop a player restoring an older copy of their own saves. Keep purchases and anything valuable on a server.
+
+## PinnedCertificateHandler
+
+Certificate pinning for `UnityWebRequest`: a request only goes through if the server's certificate has one of your pinned public keys. This stops anyone reading or changing your API traffic through a proxy with their own certificate (e.g. Charles or mitmproxy), which plain HTTPS allows if the player installs that certificate.
+
+```csharp
+private static readonly string[] ApiPins = { "current key pin=", "backup key pin=" };
+
+using UnityWebRequest request = UnityWebRequest.Get(url);
+request.certificateHandler = new PinnedCertificateHandler(ApiPins);
+yield return request.SendWebRequest();   // a rejected certificate ends with Result.ConnectionError
+```
+
+- A pin is the base64 SHA-256 of the certificate's public key (SubjectPublicKeyInfo), the value SSL Labs shows as "Pin SHA256". Get it from **Tools > NG Utility > Certificate Pin Finder** on a network you trust, from SSL Labs, or with:
+  `openssl x509 -in cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | base64`
+- Only the server's own certificate is checked. **Renewing it with a new key locks out every app version that doesn't pin that key**, so pin a backup key too, ship it before you switch, and renew with the same key (e.g. certbot `--reuse-key`).
+- A handler is disposed with its request by default, so create one per request. A rejected certificate logs a warning with the server's pin (turn off with `LogRejections`).
+- On WebGL the browser handles HTTPS and pinning has no effect. A rooted or jailbroken device can get around it. HTTPS still encrypts the traffic either way: pinning only decides which certificates to trust.
 
 ## Animation helpers
 

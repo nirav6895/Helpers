@@ -1,6 +1,7 @@
 #region Using
 using System;
 using System.Collections.Generic;
+using Unity.Collections.LowLevel.Unsafe;
 #endregion
 
 namespace NG.Utility
@@ -38,6 +39,17 @@ namespace NG.Utility
         /// </summary>
         public static readonly TEnum[] Values;
 
+        /// <summary>
+        /// Size of the enum's underlying type in bytes.
+        /// </summary>
+        private static readonly int Size = UnsafeUtility.SizeOf<TEnum>();
+
+        /// <summary>
+        /// Whether the values are exactly 0, 1, 2... (most enums). Then a value's position is its number, so
+        /// <see cref="IndexOf"/> skips the dictionary.
+        /// </summary>
+        private static readonly bool IsSequential;
+
         private static readonly Dictionary<TEnum, int> Indices;
 
         static EnumKeys()
@@ -56,6 +68,16 @@ namespace NG.Utility
             }
 
             Values = values.ToArray();
+
+            IsSequential = true;
+            for (int i = 0; i < Values.Length; i++)
+            {
+                if (ToNumber(Values[i]) != i)
+                {
+                    IsSequential = false;
+                    break;
+                }
+            }
         }
 
         /// <summary>
@@ -63,7 +85,28 @@ namespace NG.Utility
         /// </summary>
         public static int IndexOf(TEnum value)
         {
+            if (IsSequential)
+            {
+                long number = ToNumber(value);
+                return number >= 0 && number < Values.Length ? (int)number : -1;
+            }
+
             return Indices.TryGetValue(value, out int index) ? index : -1;
+        }
+
+        /// <summary>
+        /// The enum's number, read without boxing. Smaller types are read unsigned, so negative values become large
+        /// numbers; that's fine here, because only 0 to Count - 1 are valid positions.
+        /// </summary>
+        private static long ToNumber(TEnum value)
+        {
+            switch (Size)
+            {
+                case 1: return UnsafeUtility.As<TEnum, byte>(ref value);
+                case 2: return UnsafeUtility.As<TEnum, ushort>(ref value);
+                case 4: return UnsafeUtility.As<TEnum, uint>(ref value);
+                default: return UnsafeUtility.As<TEnum, long>(ref value);
+            }
         }
     }
 }

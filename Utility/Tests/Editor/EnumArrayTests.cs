@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools.Constraints;
+using Is = UnityEngine.TestTools.Constraints.Is;
 using Object = UnityEngine.Object;
 #endregion
 
@@ -56,6 +58,47 @@ namespace NG.Utility.Tests
 
             array[Rarity.Legendary] = "gold";
             Assert.AreEqual("gold", array[Rarity.Rare], "Legendary is an alias of Rare.");
+        }
+
+        [Test]
+        public void OtherUnderlyingTypes_AndNegativeValues_Work()
+        {
+            EnumArray<SmallEnum, int> small = new EnumArray<SmallEnum, int>(e => (int)e + 1);
+            Assert.AreEqual(3, small[SmallEnum.C]);
+            Assert.IsFalse(small.TryGetValue((SmallEnum)200, out _));
+
+            EnumArray<LongEnum, int> big = new EnumArray<LongEnum, int>(e => (int)e + 1);
+            Assert.AreEqual(2, big[LongEnum.B]);
+            Assert.IsFalse(big.TryGetValue((LongEnum)(-1), out _));
+
+            EnumArray<SignedEnum, string> signed = new EnumArray<SignedEnum, string>();
+            signed[SignedEnum.Minus] = "minus";
+            signed[SignedEnum.One] = "one";
+            Assert.AreEqual("minus", signed[SignedEnum.Minus]);
+            Assert.AreEqual("one", signed[SignedEnum.One]);
+            Assert.IsNull(signed[SignedEnum.Zero]);
+            Assert.IsFalse(signed.TryGetValue((SignedEnum)5, out _));
+        }
+
+        [Test]
+        public void Indexer_DoesNotAllocate()
+        {
+            EnumArray<Weapon, float> sequential = new EnumArray<Weapon, float>(1f);
+            EnumArray<Rarity, float> nonSequential = new EnumArray<Rarity, float>(1f);
+            float sum = sequential[Weapon.Bow] + nonSequential[Rarity.Rare];
+
+            Assert.That(() =>
+            {
+                for (int i = 0; i < 100; i++)
+                {
+                    sequential[(Weapon)(i % 3)] = i;
+                    sum += sequential[(Weapon)(i % 3)];
+                    nonSequential[Rarity.Epic] = i;
+                    sum += nonSequential[Rarity.Common];
+                }
+            }, Is.Not.AllocatingGCMemory());
+
+            Assert.Greater(sum, 0f);
         }
 
         [Test]

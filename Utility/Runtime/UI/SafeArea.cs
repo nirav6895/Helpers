@@ -38,6 +38,11 @@ namespace NG.Utility
         private RectTransform rectTransform;
         private Rect appliedSafeArea;
         private Vector2Int appliedScreenSize;
+
+        // The screen's safe area and size, read once per frame and shared by every SafeArea (e.g. one per screen prefab).
+        private static int screenReadFrame = -1;
+        private static Rect screenSafeArea;
+        private static Vector2Int screenSize;
         #endregion
 
 
@@ -104,7 +109,8 @@ namespace NG.Utility
 
         private void Update()
         {
-            if (Screen.safeArea != appliedSafeArea || Screen.width != appliedScreenSize.x || Screen.height != appliedScreenSize.y)
+            ReadScreen();
+            if (screenSafeArea != appliedSafeArea || screenSize != appliedScreenSize)
                 Apply();
         }
         #endregion
@@ -143,6 +149,29 @@ namespace NG.Utility
             rectTransform.anchorMax = new Vector2(max.x / screen.x, max.y / screen.y);
             rectTransform.offsetMin = Vector2.zero;
             rectTransform.offsetMax = Vector2.zero;
+        }
+        #endregion
+
+
+        #region Private Methods
+        private static void ReadScreen()
+        {
+            int frame = Time.frameCount;
+            if (frame == screenReadFrame)
+                return;
+
+            screenReadFrame = frame;
+            screenSafeArea = Screen.safeArea;
+            screenSize = new Vector2Int(Screen.width, Screen.height);
+        }
+
+        /// <summary>
+        /// Clears the shared screen values when Play Mode starts, so it works with Domain Reload disabled.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            screenReadFrame = -1;
         }
         #endregion
     }

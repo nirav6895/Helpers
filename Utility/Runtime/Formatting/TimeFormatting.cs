@@ -1,6 +1,5 @@
 #region Using
 using System;
-using System.Globalization;
 using System.Text;
 #endregion
 
@@ -12,6 +11,8 @@ namespace NG.Utility
     /// Negative and NaN durations are shown as zero. Seconds are rounded down by default; pass <c>roundUp: true</c>
     /// for countdowns, so 0.4 seconds left shows "00:01" instead of "00:00".
     /// </para>
+    /// The only allocation is the returned string, so it's fine to call every frame. To also skip that, only update
+    /// the text when the whole number of seconds changes.
     /// </summary>
     public static class TimeFormatting
     {
@@ -24,6 +25,12 @@ namespace NG.Utility
         /// Durations are clamped to this many seconds (about 31 million years), so they always fit in a long.
         /// </summary>
         private const double MaxSeconds = 1e15;
+
+        /// <summary>
+        /// Reused buffers, one per thread. The longest clock is 12 hour digits + ":mm:ss".
+        /// </summary>
+        [ThreadStatic] private static char[] digits;
+        [ThreadStatic] private static StringBuilder builder;
         #endregion
 
 
@@ -39,12 +46,20 @@ namespace NG.Utility
         {
             long total = ToWholeSeconds(seconds, roundUp);
             long hours = total / SecondsPerHour;
-            long minutes = total / SecondsPerMinute % 60;
-            long secs = total % SecondsPerMinute;
 
-            return hours > 0 || showHours
-                ? string.Format(CultureInfo.InvariantCulture, "{0:00}:{1:00}:{2:00}", hours, minutes, secs)
-                : string.Format(CultureInfo.InvariantCulture, "{0:00}:{1:00}", minutes, secs);
+            char[] chars = digits ??= new char[32];
+            int length = 0;
+            if (hours > 0 || showHours)
+            {
+                length = WriteNumber(chars, length, hours, 2);
+                chars[length++] = ':';
+            }
+
+            length = WriteNumber(chars, length, total / SecondsPerMinute % 60, 2);
+            chars[length++] = ':';
+            length = WriteNumber(chars, length, total % SecondsPerMinute, 2);
+
+            return new string(chars, 0, length);
         }
 
         /// <inheritdoc cref="ToClock(double, bool, bool)"/>
@@ -83,22 +98,21 @@ namespace NG.Utility
             int first = days > 0 ? 0 : hours > 0 ? 1 : minutes > 0 ? 2 : 3;
             int last = Math.Min(first + maxParts - 1, 3);
 
-            StringBuilder builder = new StringBuilder(16);
+            char[] chars = digits ??= new char[32];
+            StringBuilder text = builder ??= new StringBuilder(32);
+            text.Length = 0;
+
             for (int unit = first; unit <= last; unit++)
             {
-                if (builder.Length > 0)
-                    builder.Append(' ');
+                if (unit > first)
+                    text.Append(' ');
 
-                switch (unit)
-                {
-                    case 0: builder.Append(days.ToString(CultureInfo.InvariantCulture)).Append(labels.Days); break;
-                    case 1: builder.Append(hours.ToString(CultureInfo.InvariantCulture)).Append(labels.Hours); break;
-                    case 2: builder.Append(minutes.ToString(CultureInfo.InvariantCulture)).Append(labels.Minutes); break;
-                    default: builder.Append(secs.ToString(CultureInfo.InvariantCulture)).Append(labels.Seconds); break;
-                }
+                long value = unit == 0 ? days : unit == 1 ? hours : unit == 2 ? minutes : secs;
+                text.Append(chars, 0, WriteNumber(chars, 0, value, 1));
+                text.Append(unit == 0 ? labels.Days : unit == 1 ? labels.Hours : unit == 2 ? labels.Minutes : labels.Seconds);
             }
 
-            return builder.ToString();
+            return text.ToString();
         }
 
         /// <inheritdoc cref="ToCompact(double, int, bool)"/>
@@ -120,6 +134,28 @@ namespace NG.Utility
 
             // The small margin keeps float error (e.g. 3.0000001 left) from showing an extra second when rounding up.
             return roundUp ? (long)Math.Ceiling(seconds - 0.001) : (long)Math.Floor(seconds);
+        }
+
+        /// <summary>
+        /// Writes a non-negative number into <paramref name="chars"/> at <paramref name="index"/>, padded with zeros to
+        /// <paramref name="minDigits"/>, without allocating. Returns the index after the last digit.
+        /// </summary>
+        private static int WriteNumber(char[] chars, int index, long value, int minDigits)
+        {
+            int count = 1;
+            for (long rest = value; rest >= 10; rest /= 10)
+                count++;
+
+            if (count < minDigits)
+                count = minDigits;
+
+            for (int i = index + count - 1; i >= index; i--)
+            {
+                chars[i] = (char)('0' + value % 10);
+                value /= 10;
+            }
+
+            return index + count;
         }
         #endregion
     }

@@ -289,7 +289,8 @@ namespace NG.Utility
         {
             try
             {
-                UnityWebRequest request = UnityWebRequest.Get(checkUrl);
+                // No download handler: only the status code matters, so the body (e.g. a login page) is discarded.
+                UnityWebRequest request = new UnityWebRequest(checkUrl, UnityWebRequest.kHttpVerbGET);
                 request.timeout = timeout;
                 return request;
             }

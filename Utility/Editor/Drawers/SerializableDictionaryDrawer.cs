@@ -75,7 +75,8 @@ namespace NG.Utility.Editor
             float labelWidth = EditorGUIUtility.labelWidth;
             EditorGUI.indentLevel = 0;
 
-            GUIContent problem = GetKeyProblem(property, key);
+            // The duplicate check compares this row with every earlier row, so only do it when the highlight is drawn.
+            GUIContent problem = Event.current.type == EventType.Repaint ? GetKeyProblem(property, key) : null;
             if (problem != null)
             {
                 EditorGUI.DrawRect(keyRect, InvalidKeyColor);
