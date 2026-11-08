@@ -62,6 +62,27 @@ namespace NG.Utility.Tests
         }
 
         [Test]
+        public void ToClock_MatchesStringFormat()
+        {
+            // The digits are written by hand for speed; they must match string.Format("{0:00}:{1:00}").
+            System.Random random = new System.Random(4321);
+            for (int i = 0; i < 20000; i++)
+            {
+                long total = i < 10000 ? i : (long)(random.NextDouble() * 400 * 3600);
+                long hours = total / 3600;
+                long minutes = total / 60 % 60;
+                long seconds = total % 60;
+                bool showHours = i % 3 == 0;
+
+                string expected = hours > 0 || showHours
+                    ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:00}:{1:00}:{2:00}", hours, minutes, seconds)
+                    : string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:00}:{1:00}", minutes, seconds);
+
+                Assert.AreEqual(expected, TimeFormatting.ToClock(total, showHours));
+            }
+        }
+
+        [Test]
         public void ToCompact_CustomLabels()
         {
             TimeUnitLabels french = new TimeUnitLabels("j", "h", "min", "s");

@@ -107,6 +107,43 @@ namespace NG.Utility.Tests
         }
 
         [Test]
+        public void ReadsValuesSavedByVersion1Format()
+        {
+            // Saved by an earlier build of SecurePrefs, to make sure changes keep reading existing saves.
+            const string StorageKey = "ngsp.a50d601a20a43d401761c08f41a68a03";
+            const string Stored = "AVGdIhUitxomt0BqnJFYCA/13aL4FZcn6hqJDZa8Kheihy3/vAgmggFLhaJs6ueV8XXIerSUlOHWPCX9RKXKC0U=";
+
+            SecurePrefs.Configure("compatibility secret");
+            try
+            {
+                Assert.AreEqual(StorageKey, SecurePrefs.GetStorageKey("compatibility key"));
+
+                PlayerPrefs.SetString(StorageKey, Stored);
+                Assert.AreEqual(123456789012L, SecurePrefs.GetLong("compatibility key"));
+                Assert.IsEmpty(tampered);
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey(StorageKey);
+                SecurePrefs.Configure(Secret);
+            }
+        }
+
+        [Test]
+        public void ManyCalls_WithReusedCryptoObjects_StayCorrect()
+        {
+            // The HMAC and AES objects are reused between calls, so one call must never leak state into the next.
+            for (int i = 0; i < 200; i++)
+            {
+                string text = new string('x', i % 40);
+                string key = i % 2 == 0 ? Key : OtherKey;
+                Assert.IsTrue(SecurePrefs.TryDecrypt(key, SecurePrefs.Encrypt(key, text), out string decrypted));
+                Assert.AreEqual(text, decrypted);
+                Assert.IsFalse(SecurePrefs.TryDecrypt(OtherKey == key ? Key : OtherKey, SecurePrefs.Encrypt(key, text), out _));
+            }
+        }
+
+        [Test]
         public void EditedValue_IsRejected_AndRaisesTamperDetected()
         {
             SecurePrefs.SetLong(Key, 1500);
@@ -145,10 +182,12 @@ namespace NG.Utility.Tests
         public void DifferentSecret_CantReadTheValues()
         {
             SecurePrefs.SetInt(Key, 5);
-            string stored = PlayerPrefs.GetString(SecurePrefs.GetStorageKey(Key));
+            string storageKey = SecurePrefs.GetStorageKey(Key);
+            string stored = PlayerPrefs.GetString(storageKey);
 
             SecurePrefs.Configure("another secret");
             Assert.IsFalse(SecurePrefs.TryDecrypt(Key, stored, out _));
+            Assert.AreNotEqual(storageKey, SecurePrefs.GetStorageKey(Key), "Cached storage keys are cleared by Configure.");
         }
 
         [Test]

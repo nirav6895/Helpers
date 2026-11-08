@@ -1,4 +1,5 @@
 #region Using
+using System;
 using System.Globalization;
 using NUnit.Framework;
 #endregion
@@ -79,6 +80,68 @@ namespace NG.Utility.Tests
         {
             Assert.AreEqual("1.5K", 1500.ToAbbreviatedString());
             Assert.AreEqual("1,5K", 1500.ToAbbreviatedString(provider: CultureInfo.GetCultureInfo("de-DE")));
+        }
+
+        [Test]
+        public void Abbreviate_MatchesTheFormatStringImplementation()
+        {
+            // The digits are written by hand for speed; they must match what ToString("0.##") gave before.
+            System.Random random = new System.Random(12345);
+            IFormatProvider[] cultures = { CultureInfo.InvariantCulture, CultureInfo.GetCultureInfo("de-DE") };
+
+            for (int i = 0; i < 20000; i++)
+            {
+                double magnitude = Math.Pow(10, random.NextDouble() * 20 - 3);
+                double value = (random.Next(2) == 0 ? -1 : 1) * magnitude;
+                if (i % 7 == 0)
+                    value = Math.Round(value, 3);   // values near rounding boundaries
+
+                int decimals = random.Next(0, 5);
+                double abbreviateFrom = i % 5 == 0 ? 1000000 : 1000;
+                IFormatProvider culture = cultures[i % 2];
+
+                Assert.AreEqual(Reference(value, decimals, abbreviateFrom, culture), NumberAbbreviation.Abbreviate(value, decimals, abbreviateFrom, culture),
+                    $"value {value:R}, {decimals} decimals, from {abbreviateFrom}");
+            }
+        }
+
+        /// <summary>
+        /// The previous implementation, which formatted with ToString("0.##").
+        /// </summary>
+        private static string Reference(double value, int maxDecimals, double abbreviateFrom, IFormatProvider provider)
+        {
+            string[] suffixes = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" };
+            string format = maxDecimals == 0 ? "0" : "0." + new string('#', maxDecimals);
+
+            double rounded = Round(value, maxDecimals);
+            if (Math.Abs(rounded) < abbreviateFrom)
+                return rounded.ToString(format, provider);
+
+            int unit = 0;
+            double scaled = value;
+            while (Math.Abs(scaled) >= 1000 && unit < suffixes.Length - 1)
+            {
+                scaled /= 1000;
+                unit++;
+            }
+
+            rounded = Round(scaled, maxDecimals);
+            if (Math.Abs(rounded) >= 1000 && unit < suffixes.Length - 1)
+            {
+                unit++;
+                rounded = Round(scaled / 1000, maxDecimals);
+            }
+
+            if (Math.Abs(rounded) >= 1000)
+                return value.ToString(format + "E+0", provider);
+
+            return rounded.ToString(format, provider) + suffixes[unit];
+        }
+
+        private static double Round(double value, int decimals)
+        {
+            double rounded = Math.Round(value, decimals, MidpointRounding.AwayFromZero);
+            return rounded == 0 ? 0 : rounded;
         }
     }
 }

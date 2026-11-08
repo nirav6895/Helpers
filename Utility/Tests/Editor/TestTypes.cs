@@ -22,6 +22,30 @@ namespace NG.Utility.Tests
         Legendary = 20
     }
 
+    public enum SmallEnum : byte
+    {
+        A,
+        B,
+        C
+    }
+
+    public enum LongEnum : long
+    {
+        A,
+        B,
+        C
+    }
+
+    /// <summary>
+    /// Has a negative value, so it isn't numbered 0, 1, 2 and uses the dictionary lookup.
+    /// </summary>
+    public enum SignedEnum
+    {
+        Minus = -1,
+        Zero = 0,
+        One = 1
+    }
+
     [Serializable]
     public class EnumArrayHolder
     {

@@ -33,6 +33,7 @@ namespace NG.Utility.Samples
         #region Variables
         private CountdownTimer rewardTimer;
         private long coins = 1500;
+        private int lastShownSeconds = -1;
         #endregion
 
 
@@ -73,10 +74,18 @@ namespace NG.Utility.Samples
         private void Update()
         {
             rewardTimer.Tick();
-            timerText.text = "Next reward in " + TimeFormatting.ToClock(rewardTimer.Remaining, roundUp: true);
 
-            if (checkingIndicator != null)
-                checkingIndicator.SetActive(InternetMonitor.Instance != null && InternetMonitor.Instance.IsChecking);
+            // Only build a new string when the shown second changes, not every frame.
+            int shownSeconds = Mathf.CeilToInt(rewardTimer.Remaining - 0.001f);
+            if (shownSeconds != lastShownSeconds)
+            {
+                lastShownSeconds = shownSeconds;
+                timerText.text = "Next reward in " + TimeFormatting.ToClock(rewardTimer.Remaining, roundUp: true);
+            }
+
+            bool checking = InternetMonitor.Instance != null && InternetMonitor.Instance.IsChecking;
+            if (checkingIndicator != null && checkingIndicator.activeSelf != checking)
+                checkingIndicator.SetActive(checking);
         }
         #endregion
 

@@ -55,6 +55,11 @@ namespace NG.Utility
         /// </summary>
         public event Action<int> PageChanged;
 
+        /// <summary>
+        /// Smallest move per frame, in content units. ScrollRect ignores moves under 0.01.
+        /// </summary>
+        private const float MinStep = 0.02f;
+
         private ScrollRect scrollRect;
         private readonly List<RectTransform> pages = new List<RectTransform>();
         private readonly Vector3[] corners = new Vector3[4];
@@ -477,41 +482,55 @@ namespace NG.Utility
 
         private void MoveTowardsCurrentPage()
         {
-            float hiddenLength = GetHiddenLength();
+            GetScrollState(out float position, out float hiddenLength);
             if (PageCount == 0 || hiddenLength <= 0f)
             {
                 isSnapping = false;
                 return;
             }
 
-            float target = pagePositions[currentPage];
-            float position = GetNormalizedPosition();
             float deltaTime = useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
+            if (deltaTime <= 0f)
+                return;
+
+            float target = pagePositions[currentPage];
 
             // Frame-rate independent smoothing.
-            float next = Mathf.Lerp(position, target, 1f - Mathf.Exp(-snapSpeed * deltaTime));
+            float fraction = 1f - Mathf.Exp(-snapSpeed * deltaTime);
+            float remaining = Mathf.Abs(target - position) * hiddenLength;
 
-            // Stop within half a unit of the content's size.
-            if (Mathf.Abs(next - target) * hiddenLength < 0.5f)
+            // Finish within half a unit, or when this frame's step is too small for ScrollRect to apply: it ignores moves
+            // under 0.01 units, which at very high frame rates would leave the content stuck just short of the page.
+            float next;
+            if (remaining < 0.5f || remaining * fraction < MinStep)
             {
                 next = target;
                 isSnapping = false;
             }
+            else
+            {
+                next = Mathf.Lerp(position, target, fraction);
+            }
 
-            SetNormalizedPosition(next);
+            ApplyNormalizedPosition(next);
         }
 
         private float GetNormalizedPosition()
         {
-            return IsHorizontal ? ScrollRect.horizontalNormalizedPosition : ScrollRect.verticalNormalizedPosition;
+            GetScrollState(out float position, out _);
+            return position;
         }
 
         private void SetNormalizedPosition(float position)
         {
             // When the content fits in the viewport, ScrollRect would move it away from its resting place.
-            if (GetHiddenLength() <= 0f)
-                return;
+            GetScrollState(out _, out float hiddenLength);
+            if (hiddenLength > 0f)
+                ApplyNormalizedPosition(position);
+        }
 
+        private void ApplyNormalizedPosition(float position)
+        {
             if (IsHorizontal)
                 ScrollRect.horizontalNormalizedPosition = position;
             else
@@ -519,17 +538,30 @@ namespace NG.Utility
         }
 
         /// <summary>
-        /// How much of the content is outside the viewport along the scroll axis.
+        /// The normalized scroll position and how much of the content is outside the viewport along the scroll axis,
+        /// from one measurement of the content (the ScrollRect's own getter measures it again on every call).
+        /// Same formula as ScrollRect's normalized position; 0 or 1 when the content fits.
         /// </summary>
-        private float GetHiddenLength()
+        private void GetScrollState(out float position, out float hiddenLength)
         {
+            bool horizontal = IsHorizontal;
             RectTransform content = ScrollRect.content;
             if (content == null)
-                return 0f;
+            {
+                position = horizontal ? 0f : 1f;
+                hiddenLength = 0f;
+                return;
+            }
 
             RectTransform viewport = GetViewport();
-            int axis = IsHorizontal ? 0 : 1;
-            return GetBoundsInViewport(content, viewport).size[axis] - viewport.rect.size[axis];
+            Rect view = viewport.rect;
+            Bounds contentBounds = GetBoundsInViewport(content, viewport);
+
+            int axis = horizontal ? 0 : 1;
+            hiddenLength = contentBounds.size[axis] - view.size[axis];
+            position = hiddenLength > 0f
+                ? (view.min[axis] - contentBounds.min[axis]) / hiddenLength
+                : horizontal ? 0f : 1f;
         }
 
         private RectTransform GetViewport()

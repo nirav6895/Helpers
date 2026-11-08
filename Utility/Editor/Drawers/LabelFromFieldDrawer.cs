@@ -13,6 +13,11 @@ namespace NG.Utility.Editor
     {
         #region Variables
         private readonly GUIContent content = new GUIContent();
+
+        /// <summary>
+        /// Display names of the labelling field's enum, if it is one. The drawer belongs to one field, so it's always the same enum.
+        /// </summary>
+        private string[] enumNames;
         #endregion
 
 
@@ -26,7 +31,20 @@ namespace NG.Utility.Editor
         {
             string fieldName = ((LabelFromFieldAttribute)attribute).FieldName;
             SerializedProperty source = string.IsNullOrEmpty(fieldName) ? null : property.FindPropertyRelative(fieldName);
-            string text = source != null ? DrawerUtility.GetValueLabel(source) : null;
+            string text = null;
+            if (source != null)
+            {
+                // [SerializeReference] elements can be different classes, whose fields can be different enums: don't cache.
+                if (property.propertyType == SerializedPropertyType.ManagedReference)
+                {
+                    string[] uncached = null;
+                    text = DrawerUtility.GetValueLabel(source, ref uncached);
+                }
+                else
+                {
+                    text = DrawerUtility.GetValueLabel(source, ref enumNames);
+                }
+            }
 
             if (text != null)
             {

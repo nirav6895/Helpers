@@ -1,5 +1,6 @@
 #region Using
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -77,6 +78,7 @@ namespace NG.Utility
         private int holdPointerId;
         private float heldTime;
         private float nextRepeatTime;
+        private Coroutine holdRoutine;
         #endregion
 
 
@@ -147,43 +149,6 @@ namespace NG.Utility
         #endregion
 
 
-        #region Unity Methods
-        private void Update()
-        {
-            if (!isHolding)
-                return;
-
-            if (!IsInteractable())
-            {
-                EndHold();
-                return;
-            }
-
-            heldTime += useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
-
-            if (!holdCompleted)
-            {
-                if (heldTime < holdDuration)
-                {
-                    RaiseProgress(HoldProgress);
-                    return;
-                }
-
-                holdCompleted = true;
-                nextRepeatTime = heldTime + repeatInterval;
-                RaiseProgress(1f);
-                RaiseCompleted();
-            }
-            else if (repeatWhileHeld && heldTime >= nextRepeatTime)
-            {
-                // One repeat per frame: after a long frame, the missed repeats follow on the next frames.
-                nextRepeatTime += repeatInterval;
-                RaiseCompleted();
-            }
-        }
-        #endregion
-
-
         #region Overridden Methods
         public override void OnPointerDown(PointerEventData eventData)
         {
@@ -201,6 +166,9 @@ namespace NG.Utility
             holdCompleted = false;
             heldTime = 0f;
             holdPointerId = eventData.pointerId;
+
+            // Start before the events, so a listener that disables the button stops it.
+            holdRoutine = StartCoroutine(HoldRoutine());
 
             HoldStarted?.Invoke();
             onHoldStarted.Invoke();
@@ -246,9 +214,57 @@ namespace NG.Utility
 
 
         #region Private Methods
+        /// <summary>
+        /// Counts the hold time. It only runs while the button is held, so idle buttons cost nothing per frame.
+        /// </summary>
+        private IEnumerator HoldRoutine()
+        {
+            while (isHolding)
+            {
+                yield return null;
+
+                if (!isHolding)
+                    yield break;
+
+                if (!IsInteractable())
+                {
+                    EndHold();
+                    yield break;
+                }
+
+                heldTime += useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
+
+                if (!holdCompleted)
+                {
+                    if (heldTime < holdDuration)
+                    {
+                        RaiseProgress(HoldProgress);
+                        continue;
+                    }
+
+                    holdCompleted = true;
+                    nextRepeatTime = heldTime + repeatInterval;
+                    RaiseProgress(1f);
+                    RaiseCompleted();
+                }
+                else if (repeatWhileHeld && heldTime >= nextRepeatTime)
+                {
+                    // One repeat per frame: after a long frame, the missed repeats follow on the next frames.
+                    nextRepeatTime += repeatInterval;
+                    RaiseCompleted();
+                }
+            }
+        }
+
         private void EndHold()
         {
             isHolding = false;
+            if (holdRoutine != null)
+            {
+                StopCoroutine(holdRoutine);
+                holdRoutine = null;
+            }
+
             suppressNextClick = holdCompleted && suppressClickAfterHold;
             RaiseProgress(0f);
 

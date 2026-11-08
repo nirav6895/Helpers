@@ -1,5 +1,6 @@
 #region Using
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
@@ -49,10 +50,12 @@ namespace NG.Utility
         private const int HeaderSize = 1 + BlockSize;
 
         private static readonly RandomNumberGenerator RandomBytes = RandomNumberGenerator.Create();
+        private static readonly byte[] NoBytes = new byte[0];
 
-        private static byte[] encryptionKey;
-        private static byte[] authenticationKey;
-        private static byte[] keyNameKey;
+        /// <summary>
+        /// Keys and crypto objects made by <see cref="Configure"/>, reused by every call (main thread only).
+        /// </summary>
+        private static CryptoState crypto;
         private static bool isDeviceBound;
         #endregion
 
@@ -61,7 +64,7 @@ namespace NG.Utility
         /// <summary>
         /// Whether <see cref="Configure"/> has been called.
         /// </summary>
-        public static bool IsConfigured => encryptionKey != null;
+        public static bool IsConfigured => crypto != null;
 
         /// <summary>
         /// Whether values are bound to this device. False if device binding wasn't asked for, or isn't supported here.
@@ -107,9 +110,12 @@ namespace NG.Utility
 
             // HKDF-style: one master key from the secret, then a separate key for each use.
             byte[] masterKey = Hmac(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(salt));
-            encryptionKey = Hmac(masterKey, Encoding.UTF8.GetBytes("encryption"));
-            authenticationKey = Hmac(masterKey, Encoding.UTF8.GetBytes("authentication"));
-            keyNameKey = Hmac(masterKey, Encoding.UTF8.GetBytes("key names"));
+
+            crypto?.Dispose();
+            crypto = new CryptoState(
+                Hmac(masterKey, Encoding.UTF8.GetBytes("encryption")),
+                Hmac(masterKey, Encoding.UTF8.GetBytes("authentication")),
+                Hmac(masterKey, Encoding.UTF8.GetBytes("key names")));
         }
         #endregion
 
@@ -281,15 +287,7 @@ namespace NG.Utility
         /// </summary>
         internal static string GetStorageKey(string key)
         {
-            EnsureConfigured();
-
-            byte[] hash = Hmac(keyNameKey, Encoding.UTF8.GetBytes(key ?? string.Empty));
-            StringBuilder builder = new StringBuilder(StorageKeyPrefix.Length + 32);
-            builder.Append(StorageKeyPrefix);
-            for (int i = 0; i < 16; i++)
-                builder.Append(hash[i].ToString("x2"));
-
-            return builder.ToString();
+            return GetKeyInfo(key).StorageKey;
         }
 
         /// <summary>
@@ -297,40 +295,112 @@ namespace NG.Utility
         /// </summary>
         internal static void ResetConfiguration()
         {
-            encryptionKey = null;
-            authenticationKey = null;
-            keyNameKey = null;
+            crypto?.Dispose();
+            crypto = null;
             isDeviceBound = false;
         }
 
         internal static string Encrypt(string key, string text)
         {
-            EnsureConfigured();
-
-            byte[] iv = new byte[BlockSize];
-            RandomBytes.GetBytes(iv);
-
-            byte[] plain = Encoding.UTF8.GetBytes(text);
-            byte[] cipher;
-            using (Aes aes = CreateAes())
-            using (ICryptoTransform encryptor = aes.CreateEncryptor(encryptionKey, iv))
-                cipher = encryptor.TransformFinalBlock(plain, 0, plain.Length);
-
-            // Format: version | IV | ciphertext | HMAC(key name, version | IV | ciphertext)
-            byte[] output = new byte[HeaderSize + cipher.Length + MacSize];
-            output[0] = FormatVersion;
-            Buffer.BlockCopy(iv, 0, output, 1, BlockSize);
-            Buffer.BlockCopy(cipher, 0, output, HeaderSize, cipher.Length);
-
-            byte[] mac = ComputeMac(key, output, HeaderSize + cipher.Length);
-            Buffer.BlockCopy(mac, 0, output, HeaderSize + cipher.Length, MacSize);
-
-            return Convert.ToBase64String(output);
+            return Encrypt(GetKeyInfo(key), text);
         }
 
         internal static bool TryDecrypt(string key, string stored, out string text)
         {
+            return TryDecrypt(GetKeyInfo(key), stored, out text);
+        }
+        #endregion
+
+
+        #region Private Methods
+        private static void SetText(string key, string text)
+        {
+            KeyInfo info = GetKeyInfo(key);
+            PlayerPrefs.SetString(info.StorageKey, Encrypt(info, text));
+        }
+
+        private static bool TryGetText(string key, out string text)
+        {
+            KeyInfo info = GetKeyInfo(key);
+            if (!PlayerPrefs.HasKey(info.StorageKey))
+            {
+                text = null;
+                return false;
+            }
+
+            if (TryDecrypt(info, PlayerPrefs.GetString(info.StorageKey), out text))
+                return true;
+
+            Debug.LogWarning($"[{LogPrefix}] The value of '{key}' failed verification, so the default value was returned. It was edited, copied from another key or device, or saved with a different secret.");
+            TamperDetected?.Invoke(key);
+            return false;
+        }
+
+        /// <summary>
+        /// The storage key and MAC prefix of a key name, made once per name and cached until the next Configure.
+        /// </summary>
+        private static KeyInfo GetKeyInfo(string key)
+        {
             EnsureConfigured();
+            key ??= string.Empty;
+
+            if (crypto.KeyCache.TryGetValue(key, out KeyInfo info))
+                return info;
+
+            byte[] name = Encoding.UTF8.GetBytes(key);
+
+            // The storage key: a hash of the name, so the names aren't readable.
+            crypto.KeyNames.Initialize();
+            byte[] hash = crypto.KeyNames.ComputeHash(name);
+            char[] storageKey = new char[StorageKeyPrefix.Length + 32];
+            StorageKeyPrefix.CopyTo(0, storageKey, 0, StorageKeyPrefix.Length);
+            for (int i = 0; i < 16; i++)
+            {
+                storageKey[StorageKeyPrefix.Length + i * 2] = HexDigit(hash[i] >> 4);
+                storageKey[StorageKeyPrefix.Length + i * 2 + 1] = HexDigit(hash[i] & 0xF);
+            }
+
+            // The MAC covers the name with its length first, so names and data can't be shifted between each other.
+            byte[] macPrefix = new byte[4 + name.Length];
+            macPrefix[0] = (byte)(name.Length >> 24);
+            macPrefix[1] = (byte)(name.Length >> 16);
+            macPrefix[2] = (byte)(name.Length >> 8);
+            macPrefix[3] = (byte)name.Length;
+            Buffer.BlockCopy(name, 0, macPrefix, 4, name.Length);
+
+            info = new KeyInfo(new string(storageKey), macPrefix);
+            crypto.KeyCache.Add(key, info);
+            return info;
+        }
+
+        private static string Encrypt(KeyInfo info, string text)
+        {
+            byte[] plain = Encoding.UTF8.GetBytes(text);
+
+            // Format: version | IV | ciphertext | HMAC(key name, version | IV | ciphertext)
+            // PKCS7 always adds 1 to 16 bytes of padding.
+            int cipherLength = (plain.Length / BlockSize + 1) * BlockSize;
+            byte[] output = new byte[HeaderSize + cipherLength + MacSize];
+            output[0] = FormatVersion;
+
+            byte[] iv = crypto.Iv;
+            RandomBytes.GetBytes(iv);
+            Buffer.BlockCopy(iv, 0, output, 1, BlockSize);
+
+            using (ICryptoTransform encryptor = crypto.Cipher.CreateEncryptor(crypto.EncryptionKey, iv))
+            {
+                byte[] cipher = encryptor.TransformFinalBlock(plain, 0, plain.Length);
+                Buffer.BlockCopy(cipher, 0, output, HeaderSize, cipherLength);
+            }
+
+            byte[] mac = ComputeMac(info, output, HeaderSize + cipherLength);
+            Buffer.BlockCopy(mac, 0, output, HeaderSize + cipherLength, MacSize);
+
+            return Convert.ToBase64String(output);
+        }
+
+        private static bool TryDecrypt(KeyInfo info, string stored, out string text)
+        {
             text = null;
 
             byte[] bytes;
@@ -348,17 +418,16 @@ namespace NG.Utility
                 return false;
 
             // Check the signature before decrypting anything.
-            byte[] expectedMac = ComputeMac(key, bytes, HeaderSize + cipherLength);
+            byte[] expectedMac = ComputeMac(info, bytes, HeaderSize + cipherLength);
             if (!FixedTimeEquals(expectedMac, bytes, HeaderSize + cipherLength))
                 return false;
 
-            byte[] iv = new byte[BlockSize];
+            byte[] iv = crypto.Iv;
             Buffer.BlockCopy(bytes, 1, iv, 0, BlockSize);
 
             try
             {
-                using (Aes aes = CreateAes())
-                using (ICryptoTransform decryptor = aes.CreateDecryptor(encryptionKey, iv))
+                using (ICryptoTransform decryptor = crypto.Cipher.CreateDecryptor(crypto.EncryptionKey, iv))
                 {
                     byte[] plain = decryptor.TransformFinalBlock(bytes, HeaderSize, cipherLength);
                     text = Encoding.UTF8.GetString(plain);
@@ -369,31 +438,6 @@ namespace NG.Utility
             {
                 return false;
             }
-        }
-        #endregion
-
-
-        #region Private Methods
-        private static void SetText(string key, string text)
-        {
-            PlayerPrefs.SetString(GetStorageKey(key), Encrypt(key, text));
-        }
-
-        private static bool TryGetText(string key, out string text)
-        {
-            string storageKey = GetStorageKey(key);
-            if (!PlayerPrefs.HasKey(storageKey))
-            {
-                text = null;
-                return false;
-            }
-
-            if (TryDecrypt(key, PlayerPrefs.GetString(storageKey), out text))
-                return true;
-
-            Debug.LogWarning($"[{LogPrefix}] The value of '{key}' failed verification, so the default value was returned. It was edited, copied from another key or device, or saved with a different secret.");
-            TamperDetected?.Invoke(key);
-            return false;
         }
 
         private static bool Migrate(string key, Func<string> readPlainValue)
@@ -420,33 +464,23 @@ namespace NG.Utility
                 throw new InvalidOperationException($"[{LogPrefix}] Call SecurePrefs.Configure(secret) once at startup, before reading or writing values.");
         }
 
-        private static Aes CreateAes()
+        /// <summary>
+        /// HMAC of the key name's prefix (its length and bytes) and the first <paramref name="count"/> bytes of
+        /// <paramref name="data"/>.
+        /// </summary>
+        private static byte[] ComputeMac(KeyInfo info, byte[] data, int count)
         {
-            Aes aes = Aes.Create();
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.PKCS7;
-            return aes;
+            HMACSHA256 hmac = crypto.Authentication;
+            hmac.Initialize();
+            hmac.TransformBlock(info.MacPrefix, 0, info.MacPrefix.Length, null, 0);
+            hmac.TransformBlock(data, 0, count, null, 0);
+            hmac.TransformFinalBlock(NoBytes, 0, 0);
+            return hmac.Hash;
         }
 
-        /// <summary>
-        /// HMAC of the key name (with its length, so names and data can't be shifted between each other) and the first
-        /// <paramref name="count"/> bytes of <paramref name="data"/>.
-        /// </summary>
-        private static byte[] ComputeMac(string key, byte[] data, int count)
+        private static char HexDigit(int value)
         {
-            byte[] name = Encoding.UTF8.GetBytes(key ?? string.Empty);
-            byte[] nameLength =
-            {
-                (byte)(name.Length >> 24), (byte)(name.Length >> 16), (byte)(name.Length >> 8), (byte)name.Length
-            };
-
-            using (HMACSHA256 hmac = new HMACSHA256(authenticationKey))
-            {
-                hmac.TransformBlock(nameLength, 0, nameLength.Length, null, 0);
-                hmac.TransformBlock(name, 0, name.Length, null, 0);
-                hmac.TransformFinalBlock(data, 0, count);
-                return hmac.Hash;
-            }
+            return (char)(value < 10 ? '0' + value : 'a' + value - 10);
         }
 
         private static byte[] Hmac(byte[] key, byte[] data)
@@ -476,6 +510,55 @@ namespace NG.Utility
         private static void ResetStaticState()
         {
             TamperDetected = null;
+        }
+        #endregion
+
+
+        #region Types
+        /// <summary>
+        /// The keys and the crypto objects made from them. Creating HMAC and AES objects is the slowest part of a call,
+        /// so they are made once here and reused. That's safe because PlayerPrefs, and so SecurePrefs, is main thread only.
+        /// </summary>
+        private sealed class CryptoState : IDisposable
+        {
+            public readonly byte[] EncryptionKey;
+            public readonly Aes Cipher;
+            public readonly HMACSHA256 Authentication;
+            public readonly HMACSHA256 KeyNames;
+            public readonly byte[] Iv = new byte[BlockSize];
+            public readonly Dictionary<string, KeyInfo> KeyCache = new Dictionary<string, KeyInfo>();
+
+            public CryptoState(byte[] encryptionKey, byte[] authenticationKey, byte[] keyNameKey)
+            {
+                EncryptionKey = encryptionKey;
+                Cipher = Aes.Create();
+                Cipher.Mode = CipherMode.CBC;
+                Cipher.Padding = PaddingMode.PKCS7;
+                Authentication = new HMACSHA256(authenticationKey);
+                KeyNames = new HMACSHA256(keyNameKey);
+            }
+
+            public void Dispose()
+            {
+                Cipher.Dispose();
+                Authentication.Dispose();
+                KeyNames.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// What a key name is stored under, and the bytes its MAC starts with.
+        /// </summary>
+        private sealed class KeyInfo
+        {
+            public readonly string StorageKey;
+            public readonly byte[] MacPrefix;
+
+            public KeyInfo(string storageKey, byte[] macPrefix)
+            {
+                StorageKey = storageKey;
+                MacPrefix = macPrefix;
+            }
         }
         #endregion
     }

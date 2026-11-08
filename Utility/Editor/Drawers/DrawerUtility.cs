@@ -41,17 +41,21 @@ namespace NG.Utility.Editor
         /// A short text for a property's value, used as a label, or null if it has none (empty string,
         /// missing object reference or an unsupported type).
         /// </summary>
-        public static string GetValueLabel(SerializedProperty property)
+        /// <param name="property">The property whose value is shown.</param>
+        /// <param name="enumNames">Cache for the enum's display names. Reading them allocates, and every element of a
+        /// list has the same enum, so pass the same variable for all of them.</param>
+        public static string GetValueLabel(SerializedProperty property, ref string[] enumNames)
         {
             switch (property.propertyType)
             {
                 case SerializedPropertyType.Enum:
-                    string[] names = property.enumDisplayNames;
+                    enumNames ??= property.enumDisplayNames;
                     int index = property.enumValueIndex;
-                    return index >= 0 && index < names.Length ? names[index] : property.intValue.ToString(CultureInfo.InvariantCulture);
+                    return index >= 0 && index < enumNames.Length ? enumNames[index] : property.intValue.ToString(CultureInfo.InvariantCulture);
 
                 case SerializedPropertyType.String:
-                    return string.IsNullOrEmpty(property.stringValue) ? null : property.stringValue;
+                    string text = property.stringValue;
+                    return string.IsNullOrEmpty(text) ? null : text;
 
                 case SerializedPropertyType.Integer:
                     return property.longValue.ToString(CultureInfo.InvariantCulture);
