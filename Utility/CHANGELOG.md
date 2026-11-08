@@ -30,6 +30,8 @@ Renamed scripts keep their file GUIDs, so components already in scenes stay conn
 - **TimeFormatting**: `ToClock` ("02:15") and `ToCompact` ("1d 4h"), with round-up for countdowns and custom unit labels.
 - **CountdownTimer**: pausable, repeatable countdown in plain C#.
 - **Prefs**: PlayerPrefs for bool, long, double, enums, DateTime and objects as JSON.
+- **SecurePrefs**: encrypted PlayerPrefs (AES-256 + HMAC-SHA256, hashed key names) with tamper detection, optional device binding and migration of existing plain values.
+- **PinnedCertificateHandler**: certificate pinning for UnityWebRequest with standard SHA-256 public key pins, plus a *Certificate Pin Finder* window under Tools > NG Utility.
 - Extension methods: `GetOrAddComponent`, `DestroyChildren`, `Vector2/Vector3.With`, `Color.WithAlpha`, `CanvasGroup.SetVisible`, `Shuffle`, `GetRandom`.
 - `AnimatorExtensions.PlayAndWait` overload that takes a state hash.
 - *UI Demo* sample, README, EditMode and PlayMode tests.

@@ -3,7 +3,7 @@
   "displayName": "Utility",
   "version": "1.0.0",
   "unity": "2021.3",
-  "description": "Everyday Unity helpers: hold button, ScrollRect page snapping, safe area, internet monitor, EnumArray and SerializableDictionary, inspector label attributes, number and time formatting, countdown timer, typed PlayerPrefs, Animator/PlayableDirector waits and common extension methods.",
+  "description": "Everyday Unity helpers: hold button, ScrollRect page snapping, safe area, internet monitor, certificate pinning, EnumArray and SerializableDictionary, inspector label attributes, number and time formatting, countdown timer, typed and encrypted PlayerPrefs, Animator/PlayableDirector waits and common extension methods.",
   "keywords": [
     "utility",
     "hold button",
@@ -15,6 +15,8 @@
     "number formatting",
     "timer",
     "playerprefs",
+    "encryption",
+    "certificate pinning",
     "extensions"
   ],
   "author": {

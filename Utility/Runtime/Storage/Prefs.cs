@@ -1,6 +1,5 @@
 #region Using
 using System;
-using System.Globalization;
 using UnityEngine;
 #endregion
 
@@ -18,10 +17,15 @@ namespace NG.Utility
     /// A missing key, or a value that can't be read as the requested type, returns the default value.
     /// Like PlayerPrefs, values are written to disk on <see cref="Save"/> or when the app quits, and it's main thread only.
     /// </para>
-    /// PlayerPrefs isn't encrypted: don't use it for purchases or anything players shouldn't be able to edit.
+    /// PlayerPrefs is plain text that players can edit. For values they shouldn't change, use <see cref="SecurePrefs"/>.
     /// </summary>
     public static class Prefs
     {
+        #region Variables
+        private const string LogPrefix = "Prefs";
+        #endregion
+
+
         #region Bool
         /// <summary>
         /// Reads a bool, stored as an int (1 or 0).
@@ -47,9 +51,7 @@ namespace NG.Utility
         /// </summary>
         public static long GetLong(string key, long defaultValue = 0)
         {
-            return TryGetString(key, out string text) && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long value)
-                ? value
-                : defaultValue;
+            return TryGetString(key, out string text) && PrefsText.TryParseLong(text, out long value) ? value : defaultValue;
         }
 
         /// <summary>
@@ -57,7 +59,7 @@ namespace NG.Utility
         /// </summary>
         public static void SetLong(string key, long value)
         {
-            PlayerPrefs.SetString(key, value.ToString(CultureInfo.InvariantCulture));
+            PlayerPrefs.SetString(key, PrefsText.FromLong(value));
         }
         #endregion
 
@@ -68,9 +70,7 @@ namespace NG.Utility
         /// </summary>
         public static double GetDouble(string key, double defaultValue = 0)
         {
-            return TryGetString(key, out string text) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
-                ? value
-                : defaultValue;
+            return TryGetString(key, out string text) && PrefsText.TryParseDouble(text, out double value) ? value : defaultValue;
         }
 
         /// <summary>
@@ -78,8 +78,7 @@ namespace NG.Utility
         /// </summary>
         public static void SetDouble(string key, double value)
         {
-            // "G17" always round-trips; "R" doesn't on every .NET runtime.
-            PlayerPrefs.SetString(key, value.ToString("G17", CultureInfo.InvariantCulture));
+            PlayerPrefs.SetString(key, PrefsText.FromDouble(value));
         }
         #endregion
 
@@ -90,9 +89,7 @@ namespace NG.Utility
         /// </summary>
         public static TEnum GetEnum<TEnum>(string key, TEnum defaultValue = default) where TEnum : struct, Enum
         {
-            return TryGetString(key, out string text) && Enum.TryParse(text, out TEnum value)
-                ? value
-                : defaultValue;
+            return TryGetString(key, out string text) && PrefsText.TryParseEnum(text, out TEnum value) ? value : defaultValue;
         }
 
         /// <summary>
@@ -100,7 +97,7 @@ namespace NG.Utility
         /// </summary>
         public static void SetEnum<TEnum>(string key, TEnum value) where TEnum : struct, Enum
         {
-            PlayerPrefs.SetString(key, value.ToString());
+            PlayerPrefs.SetString(key, PrefsText.FromEnum(value));
         }
         #endregion
 
@@ -112,17 +109,7 @@ namespace NG.Utility
         /// </summary>
         public static DateTime GetDateTime(string key, DateTime defaultValue = default)
         {
-            if (!TryGetString(key, out string text) || !long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long binary))
-                return defaultValue;
-
-            try
-            {
-                return DateTime.FromBinary(binary);
-            }
-            catch (ArgumentException)
-            {
-                return defaultValue;
-            }
+            return TryGetString(key, out string text) && PrefsText.TryParseDateTime(text, out DateTime value) ? value : defaultValue;
         }
 
         /// <summary>
@@ -130,7 +117,7 @@ namespace NG.Utility
         /// </summary>
         public static void SetDateTime(string key, DateTime value)
         {
-            PlayerPrefs.SetString(key, value.ToBinary().ToString(CultureInfo.InvariantCulture));
+            PlayerPrefs.SetString(key, PrefsText.FromDateTime(value));
         }
         #endregion
 
@@ -143,18 +130,7 @@ namespace NG.Utility
         /// </summary>
         public static T GetObject<T>(string key, T defaultValue = default)
         {
-            if (!TryGetString(key, out string json) || string.IsNullOrEmpty(json))
-                return defaultValue;
-
-            try
-            {
-                return JsonUtility.FromJson<T>(json);
-            }
-            catch (ArgumentException exception)
-            {
-                Debug.LogWarning($"[Prefs] '{key}' doesn't hold valid JSON for {typeof(T).Name}, so the default value was returned: {exception.Message}");
-                return defaultValue;
-            }
+            return TryGetString(key, out string json) && PrefsText.TryParseObject(json, key, LogPrefix, out T value) ? value : defaultValue;
         }
 
         /// <summary>
@@ -162,7 +138,7 @@ namespace NG.Utility
         /// </summary>
         public static void SetObject<T>(string key, T value)
         {
-            PlayerPrefs.SetString(key, JsonUtility.ToJson(value));
+            PlayerPrefs.SetString(key, PrefsText.FromObject(value));
         }
         #endregion
 
