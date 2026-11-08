@@ -1,0 +1,17 @@
+{
+    "name": "NG.Utility.Samples.UIDemo",
+    "rootNamespace": "NG.Utility.Samples",
+    "references": [
+        "NG.Utility",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

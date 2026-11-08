@@ -3,10 +3,37 @@
   "displayName": "Utility",
   "version": "1.0.0",
   "unity": "2021.3",
-  "description": "Utility classes and functions for Unity development.",
+  "description": "Everyday Unity helpers: hold button, ScrollRect page snapping, safe area, internet monitor, EnumArray and SerializableDictionary, inspector label attributes, number and time formatting, countdown timer, typed PlayerPrefs, Animator/PlayableDirector waits and common extension methods.",
+  "keywords": [
+    "utility",
+    "hold button",
+    "scroll snap",
+    "safe area",
+    "internet",
+    "serializable dictionary",
+    "enum array",
+    "number formatting",
+    "timer",
+    "playerprefs",
+    "extensions"
+  ],
   "author": {
     "name": "Nirav Patel",
     "email": "nirav6895@gmail.com",
     "url": "https://github.com/nirav6895"
-  }
+  },
+  "dependencies": {
+    "com.unity.ugui": "1.0.0",
+    "com.unity.modules.animation": "1.0.0",
+    "com.unity.modules.director": "1.0.0",
+    "com.unity.modules.jsonserialize": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "UI Demo",
+      "description": "A scene with a snapping page carousel (page dots and previous/next buttons), a hold button with a fill bar, a safe area panel, an internet status line and number and time formatting.",
+      "path": "Samples~/UIDemo"
+    }
+  ]
 }
