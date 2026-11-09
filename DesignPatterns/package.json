@@ -17,6 +17,8 @@
     "email": "nirav6895@gmail.com",
     "url": "https://github.com/nirav6895"
   },
+  "license": "MIT",
+  "licensesUrl": "https://github.com/nirav6895/Helpers/blob/main/DesignPatterns/LICENSE.md",
   "samples": [
     {
       "displayName": "Counter-Based State Machine",

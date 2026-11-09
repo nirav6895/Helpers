@@ -24,6 +24,8 @@
     "email": "nirav6895@gmail.com",
     "url": "https://github.com/nirav6895"
   },
+  "license": "MIT",
+  "licensesUrl": "https://github.com/nirav6895/Helpers/blob/main/Utility/LICENSE.md",
   "dependencies": {
     "com.unity.ugui": "1.0.0",
     "com.unity.modules.animation": "1.0.0",
